@@ -9,7 +9,7 @@ import SwiftUI
 struct iOSEngineerCodeCheckApp: App {
     var body: some Scene {
         WindowGroup {
-            View1()
+            MainTabView()
         }
     }
 }
