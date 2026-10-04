@@ -12,6 +12,7 @@ struct RepositoryDetailView: View {
     let setBookmarked: @MainActor (Bool) -> Void
 
     /// 画面を開いた時点の登録状態。`@State` にすることで、その後の状態変化でボタン表示が変わらないようにしている
+    // TODO: - 既存の動きを担保するために設定してるので、修正時にStateを外す
     @State private var isShownAsBookmarked: Bool
 
     init(
