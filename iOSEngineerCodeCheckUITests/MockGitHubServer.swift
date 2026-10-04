@@ -16,6 +16,8 @@ final class MockGitHubServer: Sendable {
     enum Behavior: Sendable {
         /// 固定の検索結果（`searchResultsJSON`）を返す
         case success
+        /// 結果 0 件を返す
+        case noResults
         /// 検索 API が 500 を返す
         case serverError
     }
@@ -74,6 +76,8 @@ final class MockGitHubServer: Sendable {
         switch behavior {
         case .success:
             return httpResponse(status: "200 OK", body: searchResultsJSON)
+        case .noResults:
+            return httpResponse(status: "200 OK", body: #"{"total_count": 0, "incomplete_results": false, "items": []}"#)
         case .serverError:
             return httpResponse(status: "500 Internal Server Error", body: #"{"message": "Server Error"}"#)
         }

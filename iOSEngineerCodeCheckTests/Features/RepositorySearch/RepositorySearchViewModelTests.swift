@@ -31,7 +31,7 @@ struct RepositorySearchViewModelTests {
         await viewModel.searchTask?.value
     }
 
-    @Test("検索中は isSearching が true になり、成功すると結果を反映して false に戻る")
+    @Test("検索中は loading になり、成功すると結果を反映して loaded になる")
     func searchSuccess() async {
         let viewModel = makeViewModel()
         viewModel.query = "swift"
@@ -39,12 +39,12 @@ struct RepositorySearchViewModelTests {
         viewModel.search()
         await service.waitForRequest(keyword: "swift")
 
-        #expect(viewModel.isSearching)
+        #expect(viewModel.phase == .loading)
 
         await service.respond(to: "swift", with: .success([.fixture(fullName: "apple/swift")]))
         await viewModel.searchTask?.value
 
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["apple/swift"])
         #expect(viewModel.searchError == nil)
     }
@@ -70,11 +70,11 @@ struct RepositorySearchViewModelTests {
         viewModel.search()
 
         #expect(viewModel.searchTask == nil)
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .idle)
         #expect(await service.requestedKeywords.isEmpty)
     }
 
-    @Test("結果 0 件の場合は空の結果としてエラーなしで終わる")
+    @Test("結果 0 件の場合は空の結果で loaded になり、未検索（idle）と区別できる")
     func searchWithNoResults() async {
         let viewModel = makeViewModel()
         viewModel.query = "no-hit"
@@ -86,7 +86,7 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.repositories.isEmpty)
         #expect(viewModel.searchError == nil)
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
     }
 
     @Test("失敗した場合はエラーを公開し、前回の結果は残す")
@@ -106,7 +106,7 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.searchError == .network(.notConnectedToInternet))
         #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .idle)
     }
 
     @Test("次の検索を始めると前回のエラーはクリアされる")
@@ -122,7 +122,7 @@ struct RepositorySearchViewModelTests {
         viewModel.search()
 
         #expect(viewModel.searchError == nil)
-        #expect(viewModel.isSearching)
+        #expect(viewModel.phase == .loading)
 
         await service.waitForRequest(keyword: "second")
         await service.respond(to: "second", with: .success([]))
@@ -147,7 +147,7 @@ struct RepositorySearchViewModelTests {
         await oldTask?.value
 
         #expect(viewModel.repositories.map(\.fullName) == ["new/result"])
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
     }
 
     @Test("古い検索の失敗が後から返っても、新しい検索のエラー状態にしない")
@@ -187,7 +187,7 @@ struct RepositorySearchViewModelTests {
         viewModel.query = ""
 
         #expect(viewModel.repositories.isEmpty)
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .idle)
 
         await service.respond(to: "second", with: .success([.fixture(fullName: "b/second")]))
         await inFlightTask?.value

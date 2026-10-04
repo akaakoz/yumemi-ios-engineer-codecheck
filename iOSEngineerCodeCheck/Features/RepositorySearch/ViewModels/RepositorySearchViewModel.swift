@@ -15,6 +15,14 @@ import os
 @Observable
 final class RepositorySearchViewModel {
 
+    enum Phase: Equatable {
+        /// まだ検索していない、または入力をクリアした
+        case idle
+        case loading
+        /// 検索に成功した。0 件の場合も含む
+        case loaded
+    }
+
     var query = "" {
         didSet {
             if query.isEmpty {
@@ -22,9 +30,9 @@ final class RepositorySearchViewModel {
             }
         }
     }
+    private(set) var phase = Phase.idle
     /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続ける。
     private(set) var repositories: [Repository] = []
-    private(set) var isSearching = false
     /// 画面には表示しない。原因調査とテストのために保持する。
     private(set) var searchError: APIError?
     /// `searchError` と同じく画面には表示しない。
@@ -55,7 +63,7 @@ final class RepositorySearchViewModel {
         }
 
         searchTask?.cancel()
-        isSearching = true
+        phase = .loading
         searchError = nil
 
         searchTask = Task {
@@ -64,13 +72,14 @@ final class RepositorySearchViewModel {
                 // キャンセル済み = より新しい検索が始まっている、またはクリアされたので結果を反映しない
                 guard !Task.isCancelled else { return }
                 repositories = result
+                phase = .loaded
                 remarkBookmarksInSearchResults()
             } catch {
                 guard !Task.isCancelled else { return }
                 logger.error("Search failed: \(String(describing: error), privacy: .public)")
                 searchError = error
+                phase = .idle
             }
-            isSearching = false
         }
     }
 
@@ -115,7 +124,7 @@ final class RepositorySearchViewModel {
         searchTask?.cancel()
         searchTask = nil
         repositories = []
-        isSearching = false
+        phase = .idle
         searchError = nil
     }
 

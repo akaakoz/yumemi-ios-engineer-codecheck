@@ -96,6 +96,15 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, "swift")
     }
 
+    func testSearchWithNoResultsShowsNoResultsMessage() throws {
+        let app = try launchApp(searchBehavior: .noResults)
+
+        search(app, keyword: "zzzzqqqqxxxx")
+
+        XCTAssertTrue(app.staticTexts["該当するリポジトリがありません"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
+    }
+
     func testSearchFailureEndsLoadingAndKeepsGuideMessage() throws {
         let app = try launchApp(searchBehavior: .serverError)
 

@@ -61,11 +61,17 @@ struct RepositorySearchView: View {
 
     @ViewBuilder
     private var statusOverlay: some View {
-        if viewModel.isSearching {
+        switch viewModel.phase {
+        case .loading:
             ProgressView()
-        } else if viewModel.repositories.isEmpty {
+        case .idle where viewModel.repositories.isEmpty:
             Text("GitHubのリポジトリを検索できるよー")
                 .foregroundStyle(.secondary)
+        case .loaded where viewModel.repositories.isEmpty:
+            Text("該当するリポジトリがありません")
+                .foregroundStyle(.secondary)
+        case .idle, .loaded:
+            EmptyView()
         }
     }
 }
