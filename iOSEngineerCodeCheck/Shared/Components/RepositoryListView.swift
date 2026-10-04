@@ -56,7 +56,7 @@ private struct RepositoryRow: View {
                 watchersCount: 0,
                 forksCount: 0,
                 openIssuesCount: 0,
-                owner: .init(avatarUrl: "https://avatars.githubusercontent.com/u/10639145")
+                owner: .init(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
             )
         ])
     }

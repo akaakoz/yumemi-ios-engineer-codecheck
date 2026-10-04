@@ -26,9 +26,14 @@ struct Repository: Codable, Hashable, Identifiable, Sendable {
 
 extension Repository {
     struct Owner: Codable, Hashable, Sendable {
-        let avatarUrl: String
+        let avatarURLString: String
 
         /// 不正な文字列の場合は `nil`（画面ではプレースホルダー画像を表示する）
-        var avatarURL: URL? { URL(string: avatarUrl) }
+        var avatarURL: URL? { URL(string: avatarURLString) }
+
+        /// API のレスポンス（`avatar_url` を変換したもの）と保存済みのブックマークのキーに合わせる
+        private enum CodingKeys: String, CodingKey {
+            case avatarURLString = "avatarUrl"
+        }
     }
 }

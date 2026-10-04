@@ -19,7 +19,7 @@ extension Repository {
             watchersCount: 10,
             forksCount: 5,
             openIssuesCount: 1,
-            owner: Owner(avatarUrl: "https://avatars.githubusercontent.com/u/10639145")
+            owner: Owner(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
         )
     }
 }

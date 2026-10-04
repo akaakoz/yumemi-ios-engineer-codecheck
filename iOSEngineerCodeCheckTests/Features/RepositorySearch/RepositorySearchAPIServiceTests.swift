@@ -49,7 +49,7 @@ struct RepositorySearchAPIServiceTests {
 
         #expect(repositories.map(\.fullName) == ["apple/swift", "example/no-language"])
         #expect(repositories[0].stargazersCount == 67000)
-        #expect(repositories[0].owner.avatarUrl == "https://avatars.githubusercontent.com/u/10639145")
+        #expect(repositories[0].owner.avatarURLString == "https://avatars.githubusercontent.com/u/10639145")
         #expect(repositories[1].language == nil)
     }
 
