@@ -46,7 +46,6 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["apple/swift"])
-        #expect(viewModel.searchError == nil)
     }
 
     @Test("キーワードの前後の空白を取り除いて検索する")
@@ -85,12 +84,11 @@ struct RepositorySearchViewModelTests {
         await viewModel.searchTask?.value
 
         #expect(viewModel.repositories.isEmpty)
-        #expect(viewModel.searchError == nil)
         #expect(viewModel.phase == .loaded)
     }
 
-    @Test("失敗した場合はエラーを公開し、前回の結果は残す")
-    func searchFailureKeepsPreviousResults() async {
+    @Test("失敗した場合は failed になり、前回の結果は消す")
+    func searchFailureClearsPreviousResults() async {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
@@ -104,12 +102,11 @@ struct RepositorySearchViewModelTests {
         await service.respond(to: "second", with: .failure(.network(.notConnectedToInternet)))
         await viewModel.searchTask?.value
 
-        #expect(viewModel.searchError == .network(.notConnectedToInternet))
-        #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
-        #expect(viewModel.phase == .idle)
+        #expect(viewModel.phase == .failed(.network(.notConnectedToInternet)))
+        #expect(viewModel.repositories.isEmpty)
     }
 
-    @Test("次の検索を始めると前回のエラーはクリアされる")
+    @Test("失敗の後に次の検索を始めると loading になる")
     func newSearchClearsPreviousError() async {
         let viewModel = makeViewModel()
         viewModel.query = "first"
@@ -121,7 +118,6 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "second"
         viewModel.search()
 
-        #expect(viewModel.searchError == nil)
         #expect(viewModel.phase == .loading)
 
         await service.waitForRequest(keyword: "second")
@@ -166,7 +162,7 @@ struct RepositorySearchViewModelTests {
         await service.respond(to: "old", with: .failure(.network(.timedOut)))
         await oldTask?.value
 
-        #expect(viewModel.searchError == nil)
+        #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["new/result"])
     }
 

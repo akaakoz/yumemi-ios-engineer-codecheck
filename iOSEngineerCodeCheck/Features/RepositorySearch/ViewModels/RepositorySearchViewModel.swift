@@ -21,6 +21,7 @@ final class RepositorySearchViewModel {
         case loading
         /// 検索に成功した。0 件の場合も含む
         case loaded
+        case failed(APIError)
     }
 
     var query = "" {
@@ -31,11 +32,9 @@ final class RepositorySearchViewModel {
         }
     }
     private(set) var phase = Phase.idle
-    /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続ける。
+    /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
     private(set) var repositories: [Repository] = []
     /// 画面には表示しない。原因調査とテストのために保持する。
-    private(set) var searchError: APIError?
-    /// `searchError` と同じく画面には表示しない。
     private(set) var bookmarkStorageError: BookmarkStorageError?
 
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
@@ -64,7 +63,6 @@ final class RepositorySearchViewModel {
 
         searchTask?.cancel()
         phase = .loading
-        searchError = nil
 
         searchTask = Task {
             do throws(APIError) {
@@ -77,8 +75,9 @@ final class RepositorySearchViewModel {
             } catch {
                 guard !Task.isCancelled else { return }
                 logger.error("Search failed: \(String(describing: error), privacy: .public)")
-                searchError = error
-                phase = .idle
+                // 前回の結果が残っていると今回の結果と誤解されるため、消してから失敗を表示する
+                repositories = []
+                phase = .failed(error)
             }
         }
     }
@@ -125,7 +124,6 @@ final class RepositorySearchViewModel {
         searchTask = nil
         repositories = []
         phase = .idle
-        searchError = nil
     }
 
     /// 検索結果に含まれるブックマークの `isMarked` を true に戻し、変更があれば保存する。

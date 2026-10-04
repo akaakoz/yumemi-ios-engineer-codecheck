@@ -105,13 +105,13 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
     }
 
-    func testSearchFailureEndsLoadingAndKeepsGuideMessage() throws {
+    func testSearchFailureShowsErrorMessage() throws {
         let app = try launchApp(searchBehavior: .serverError)
 
         search(app, keyword: "swift")
 
-        // 失敗時は専用の表示をせず、結果なしの案内文に戻る
-        XCTAssertTrue(app.staticTexts["GitHubのリポジトリを検索できるよー"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["検索に失敗しました。時間をおいて再度お試しください。"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
         XCTAssertFalse(app.activityIndicators.firstMatch.exists)
     }
 
