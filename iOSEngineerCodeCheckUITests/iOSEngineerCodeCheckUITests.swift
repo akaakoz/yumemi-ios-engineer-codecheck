@@ -83,27 +83,17 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["検索ボタンをタップして"].waitForExistence(timeout: timeout))
     }
 
-    func testLaunchShowsGuideTextInSearchFieldAndTapKeepsIt() throws {
+    func testSearchFieldShowsGuideAsPlaceholderAndKeepsOnlyTypedText() throws {
         let app = try launchApp()
         let field = app.textFields["repositorySearch.field"]
-
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
-        XCTAssertEqual(field.value as? String, "GitHubのリポジトリを検索できるよー")
+
+        XCTAssertEqual(field.placeholderValue, "GitHubのリポジトリを検索できるよー")
 
         field.tap()
+        field.typeText("swift")
 
-        XCTAssertEqual(field.value as? String, "GitHubのリポジトリを検索できるよー")
-    }
-
-    func testSwitchingToSearchTabClearsGuideText() throws {
-        let app = try launchApp()
-        let field = app.textFields["repositorySearch.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: timeout))
-
-        app.tabBars.buttons["Bookmark"].tap()
-        app.tabBars.buttons["Search"].tap()
-
-        XCTAssertEqual(field.value as? String, "")
+        XCTAssertEqual(field.value as? String, "swift")
     }
 
     func testSearchFailureEndsLoadingAndKeepsGuideMessage() throws {
@@ -141,11 +131,6 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     private func search(_ app: XCUIApplication, keyword: String) {
         let field = app.textFields["repositorySearch.field"]
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
-        // 起動直後の案内文はタップでは消えないため、タブを切り替えて消してから入力する
-        if field.value as? String == "GitHubのリポジトリを検索できるよー" {
-            app.tabBars.buttons["Bookmark"].tap()
-            app.tabBars.buttons["Search"].tap()
-        }
         field.tap()
         field.typeText(keyword + "\n")
     }

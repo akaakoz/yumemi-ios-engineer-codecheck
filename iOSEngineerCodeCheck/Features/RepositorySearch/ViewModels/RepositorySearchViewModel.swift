@@ -22,9 +22,6 @@ final class RepositorySearchViewModel {
             }
         }
     }
-    /// 起動直後、検索欄に案内文を入力値として表示しているか。表示中は検索しない。
-    /// Search タブへ切り替えると消える。検索欄をタップしただけでは消えず、編集すると案内文に続けて入力される。
-    private(set) var isShowingInitialGuide = true
     /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続ける。
     private(set) var repositories: [Repository] = []
     private(set) var isSearching = false
@@ -51,19 +48,7 @@ final class RepositorySearchViewModel {
         self.bookmarkStorage = bookmarkStorage
     }
 
-    func dismissInitialGuide() {
-        isShowingInitialGuide = false
-    }
-
-    func updateQuery(_ text: String) {
-        isShowingInitialGuide = false
-        query = text
-    }
-
     func search() {
-        guard !isShowingInitialGuide else {
-            return
-        }
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else {
             return

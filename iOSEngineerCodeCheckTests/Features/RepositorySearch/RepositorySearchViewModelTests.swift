@@ -15,11 +15,10 @@ struct RepositorySearchViewModelTests {
     /// 端末の UserDefaults を使わないよう、ブックマークはインメモリの保存先に読み書きする
     private let bookmarkStorage = InMemoryBookmarkStorage()
 
-    /// 画面が表示され、案内文を閉じて入力できる状態の ViewModel
+    /// 画面が表示された状態の ViewModel
     private func makeViewModel() -> RepositorySearchViewModel {
         let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
         viewModel.loadBookmarks()
-        viewModel.dismissInitialGuide()
         return viewModel
     }
 
@@ -30,49 +29,6 @@ struct RepositorySearchViewModelTests {
         await service.waitForRequest(keyword: "keyword")
         await service.respond(to: "keyword", with: .success(results))
         await viewModel.searchTask?.value
-    }
-
-    @Test("起動直後は案内文を表示し、表示中は検索しない")
-    func initialGuideBlocksSearch() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-        viewModel.query = "swift"
-
-        viewModel.search()
-
-        #expect(viewModel.isShowingInitialGuide)
-        #expect(viewModel.searchTask == nil)
-        #expect(await service.requestedKeywords.isEmpty)
-    }
-
-    @Test("案内文の表示中に編集すると、案内文を含む文字列が入力値になり検索できる")
-    func editingInitialGuideBecomesQuery() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-        let editedText = "GitHubのリポジトリを検索できるよーswift"
-
-        viewModel.updateQuery(editedText)
-        viewModel.search()
-        await service.waitForRequest(keyword: editedText)
-        await service.respond(to: editedText, with: .success([]))
-        await viewModel.searchTask?.value
-
-        #expect(!viewModel.isShowingInitialGuide)
-        #expect(viewModel.query == editedText)
-        #expect(await service.requestedKeywords == [editedText])
-    }
-
-    @Test("案内文を閉じると検索できる")
-    func dismissingInitialGuideEnablesSearch() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-
-        viewModel.dismissInitialGuide()
-        viewModel.query = "swift"
-        viewModel.search()
-        await service.waitForRequest(keyword: "swift")
-        await service.respond(to: "swift", with: .success([]))
-        await viewModel.searchTask?.value
-
-        #expect(!viewModel.isShowingInitialGuide)
-        #expect(await service.requestedKeywords == ["swift"])
     }
 
     @Test("検索中は isSearching が true になり、成功すると結果を反映して false に戻る")

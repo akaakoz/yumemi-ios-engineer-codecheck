@@ -39,16 +39,14 @@ struct RepositorySearchView: View {
                 viewModel.loadBookmarks()
             }
             .onChange(of: isSelected) { _, isSelected in
-                if isSelected {
-                    viewModel.dismissInitialGuide()
-                } else {
+                if !isSelected {
                     isSearchFieldFocused = false
                 }
             }
     }
 
     private var searchHeader: some View {
-        TextField("", text: searchFieldText)
+        TextField("", text: $viewModel.query, prompt: Text("GitHubのリポジトリを検索できるよー"))
             .textFieldStyle(.roundedBorder)
             .submitLabel(.search)
             .focused($isSearchFieldFocused)
@@ -59,18 +57,6 @@ struct RepositorySearchView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(.bar)
-    }
-
-    /// `isShowingInitialGuide` は必ず body の評価中に読むこと。`Binding` のクロージャ内だけで読むと変更が監視されず、
-    /// タブ切り替えで案内文を消しても検索欄が更新されない。
-    private var searchFieldText: Binding<String> {
-        guard viewModel.isShowingInitialGuide else {
-            return $viewModel.query
-        }
-        return Binding(
-            get: { "GitHubのリポジトリを検索できるよー" },
-            set: { viewModel.updateQuery($0) }
-        )
     }
 
     @ViewBuilder
