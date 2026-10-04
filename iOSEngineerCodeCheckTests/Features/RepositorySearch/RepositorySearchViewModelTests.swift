@@ -15,9 +15,10 @@ struct RepositorySearchViewModelTests {
     /// 端末の UserDefaults を使わないよう、ブックマークはインメモリの保存先に読み書きする
     private let bookmarkStorage = InMemoryBookmarkStorage()
 
-    /// 案内文を閉じて入力できる状態の ViewModel
+    /// 画面が表示され、案内文を閉じて入力できる状態の ViewModel
     private func makeViewModel() -> RepositorySearchViewModel {
         let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+        viewModel.loadBookmarks()
         viewModel.dismissInitialGuide()
         return viewModel
     }
@@ -240,8 +241,17 @@ struct RepositorySearchViewModelTests {
 
     // MARK: - ブックマーク
 
-    @Test("起動時に保存済みのブックマークを読み込み、登録済みかどうかを返す")
-    func loadsBookmarkedStateOnInit() throws {
+    @Test("生成しただけでは保存先を読み込まない")
+    func initDoesNotReadStorage() throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+
+        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+
+        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+    }
+
+    @Test("loadBookmarks で保存済みのブックマークを読み込み、登録済みかどうかを返す")
+    func loadsBookmarkedState() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one", isMarked: false)])
 
         let viewModel = makeViewModel()

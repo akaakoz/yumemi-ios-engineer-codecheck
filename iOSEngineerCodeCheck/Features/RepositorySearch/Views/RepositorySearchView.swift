@@ -36,6 +36,9 @@ struct RepositorySearchView: View {
                     viewModel.setBookmarked(repository, isBookmarked: isBookmarked)
                 }
             }
+            .onAppear {
+                viewModel.loadBookmarks()
+            }
             .onChange(of: isSelected) { _, isSelected in
                 // 旧実装はタブ切り替え時に検索欄へフォーカスする意図だったが、実際にはフォーカスされていなかった。
                 // 挙動を変えないよう、ここではフォーカスしない（stability 課題で見直す）

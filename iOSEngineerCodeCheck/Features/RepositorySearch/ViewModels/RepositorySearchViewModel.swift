@@ -40,7 +40,7 @@ final class RepositorySearchViewModel {
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
     /// ブックマーク済みのリポジトリ。ブックマークの登録・削除は Search タブからしか行えないため、
-    /// 起動時に読み込んだ後はこの ViewModel での変更に合わせて更新すれば保存内容と一致する。
+    /// `loadBookmarks()` で読み込んだ後はこの ViewModel での変更に合わせて更新すれば保存内容と一致する。
     private var bookmarkedRepositoryIDs: Set<Repository.ID> = []
 
     private let apiService: any RepositorySearchAPIServiceProtocol
@@ -53,9 +53,6 @@ final class RepositorySearchViewModel {
     ) {
         self.apiService = apiService
         self.bookmarkStorage = bookmarkStorage
-        if let bookmarks = loadBookmarks() {
-            bookmarkedRepositoryIDs = Set(bookmarks.map(\.id))
-        }
     }
 
     func dismissInitialGuide() {
@@ -98,6 +95,13 @@ final class RepositorySearchViewModel {
     }
 
     // MARK: - ブックマーク
+    /// 保存済みのブックマークを読み込む。
+    func loadBookmarks() {
+        guard let bookmarks = readStoredBookmarks() else {
+            return
+        }
+        bookmarkedRepositoryIDs = Set(bookmarks.map(\.id))
+    }
 
     func isBookmarked(_ repository: Repository) -> Bool {
         bookmarkedRepositoryIDs.contains(repository.id)
@@ -114,7 +118,7 @@ final class RepositorySearchViewModel {
             bookmarkedRepositoryIDs.remove(repository.id)
         }
 
-        guard var bookmarks = loadBookmarks() else {
+        guard var bookmarks = readStoredBookmarks() else {
             return
         }
         if isBookmarked {
@@ -138,7 +142,7 @@ final class RepositorySearchViewModel {
 
     /// 検索結果に含まれるブックマークの `isMarked` を true に戻し、変更があれば保存する。
     private func remarkBookmarksInSearchResults() {
-        guard var bookmarks = loadBookmarks() else {
+        guard var bookmarks = readStoredBookmarks() else {
             return
         }
         if remarkBookmarks(&bookmarks, in: repositories) {
@@ -159,7 +163,7 @@ final class RepositorySearchViewModel {
     }
 
     /// - Returns: 読み込めなかった場合は `nil`（失敗は `bookmarkStorageError` とログに残す）
-    private func loadBookmarks() -> [Bookmark]? {
+    private func readStoredBookmarks() -> [Bookmark]? {
         do {
             return try bookmarkStorage.loadBookmarks()
         } catch {
