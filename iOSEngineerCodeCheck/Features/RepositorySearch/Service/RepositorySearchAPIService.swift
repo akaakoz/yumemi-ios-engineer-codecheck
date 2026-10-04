@@ -7,9 +7,9 @@ import Foundation
 
 struct RepositorySearchAPIService: RepositorySearchAPIServiceProtocol {
 
-    private let apiClient: any APIClientProtocol
+    private let apiClient: APIClientProtocol
 
-    init(apiClient: any APIClientProtocol = APIClient()) {
+    init(apiClient: APIClientProtocol = APIClient()) {
         self.apiClient = apiClient
     }
 

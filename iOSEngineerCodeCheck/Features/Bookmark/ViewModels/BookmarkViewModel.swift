@@ -17,10 +17,10 @@ final class BookmarkViewModel {
     /// 画面には表示しない。原因調査とテストのために保持する。
     private(set) var storageError: BookmarkStorageError?
 
-    private let storage: any BookmarkStorageProtocol
+    private let storage: BookmarkStorageProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "Bookmark")
 
-    init(storage: any BookmarkStorageProtocol = UserDefaultsBookmarkStorage()) {
+    init(storage: BookmarkStorageProtocol = UserDefaultsBookmarkStorage()) {
         self.storage = storage
     }
 

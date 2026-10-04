@@ -24,14 +24,14 @@ struct Bookmark: Codable, Hashable, Identifiable, Sendable {
         case marked
     }
 
-    init(from decoder: any Decoder) throws {
+    init(from decoder: Decoder) throws {
         repository = try Repository(from: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         // `marked` が保存されていないデータは登録状態が分からないため、未登録として扱う
         isMarked = try container.decodeIfPresent(Bool.self, forKey: .marked) ?? false
     }
 
-    func encode(to encoder: any Encoder) throws {
+    func encode(to encoder: Encoder) throws {
         try repository.encode(to: encoder)
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(isMarked, forKey: .marked)

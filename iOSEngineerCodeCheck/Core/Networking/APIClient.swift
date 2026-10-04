@@ -23,11 +23,11 @@ struct APIClient: APIClientProtocol {
     static let baseURLOverrideKey = "APIBaseURL"
 
     private let baseURL: URLComponents
-    private let session: any NetworkSession
+    private let session: NetworkSession
 
     init(
         baseURL: URLComponents = APIClient.defaultBaseURL(),
-        session: any NetworkSession = URLSession.shared
+        session: NetworkSession = URLSession.shared
     ) {
         self.baseURL = baseURL
         self.session = session

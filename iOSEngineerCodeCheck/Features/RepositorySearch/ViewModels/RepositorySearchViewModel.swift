@@ -39,13 +39,13 @@ final class RepositorySearchViewModel {
     /// `loadBookmarks()` で読み込んだ後はこの ViewModel での変更に合わせて更新すれば保存内容と一致する。
     private var bookmarkedRepositoryIDs: Set<Repository.ID> = []
 
-    private let apiService: any RepositorySearchAPIServiceProtocol
-    private let bookmarkStorage: any BookmarkStorageProtocol
+    private let apiService: RepositorySearchAPIServiceProtocol
+    private let bookmarkStorage: BookmarkStorageProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositorySearch")
 
     init(
-        apiService: any RepositorySearchAPIServiceProtocol = RepositorySearchAPIService(),
-        bookmarkStorage: any BookmarkStorageProtocol = UserDefaultsBookmarkStorage()
+        apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService(),
+        bookmarkStorage: BookmarkStorageProtocol = UserDefaultsBookmarkStorage()
     ) {
         self.apiService = apiService
         self.bookmarkStorage = bookmarkStorage
