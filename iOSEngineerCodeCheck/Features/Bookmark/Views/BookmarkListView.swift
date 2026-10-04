@@ -5,7 +5,6 @@
 
 import SwiftUI
 
-/// 表示されるたびに保存済みのブックマークを読み込み直し、Search タブでの追加・削除を反映する。
 struct BookmarkListView: View {
 
     @State private var viewModel: BookmarkViewModel

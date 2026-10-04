@@ -6,8 +6,6 @@
 import SwiftUI
 
 /// ユーザー向けの文言。ローカライズ時に String Catalog へ移しやすいよう、画面ごとにここへ集約する。
-///
-/// 旧実装の `Text("\(count) stars")` と同じ表示（ロケールに応じた数値の書式）を保つため `LocalizedStringKey` を使う。
 enum AppStrings {
 
     enum MainTab {

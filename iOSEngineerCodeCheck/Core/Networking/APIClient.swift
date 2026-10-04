@@ -5,7 +5,6 @@
 
 import Foundation
 
-/// 全機能で共通の API 通信処理。機能側は `URLSession` を直接使わず、このプロトコル経由で通信する。
 protocol APIClientProtocol: Sendable {
     func send<Request: APIRequest>(_ request: Request) async throws(APIError) -> Request.Response
 }
@@ -74,7 +73,7 @@ struct APIClient: APIClientProtocol {
         }
     }
 
-    /// - Note: `URLComponents` は `+` をエンコードしないため、`c++` は GitHub 側で `c` の検索として扱われる（旧実装と同じ挙動）。
+    /// - Note: `URLComponents` は `+` をエンコードしないため、`c++` は GitHub 側で `c` の検索として扱われる。
     func makeURLRequest<Request: APIRequest>(for request: Request) throws(APIError) -> URLRequest {
         var components = baseURL
         components.path = request.path
@@ -86,7 +85,6 @@ struct APIClient: APIClientProtocol {
         return URLRequest(url: url)
     }
 
-    /// GitHub API のキーは snake_case のため、Swift の命名（camelCase）に変換してデコードする。
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

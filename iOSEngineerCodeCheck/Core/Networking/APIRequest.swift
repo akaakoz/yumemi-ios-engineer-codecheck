@@ -5,7 +5,6 @@
 
 import Foundation
 
-/// `APIClient` に渡すリクエスト定義。
 protocol APIRequest: Sendable {
     associatedtype Response: Decodable & Sendable
 

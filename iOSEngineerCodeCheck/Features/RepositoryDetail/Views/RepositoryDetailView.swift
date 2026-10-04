@@ -5,8 +5,6 @@
 
 import SwiftUI
 
-/// ブックマークの状態や保存方法には依存せず、表示する登録状態とボタンを押したときの処理を呼び出し側から受け取る。
-/// 旧実装の挙動を維持するため、ボタンの表示（Add / Remove）は画面を開いた時点の状態から変えない。
 struct RepositoryDetailView: View {
 
     let repository: Repository

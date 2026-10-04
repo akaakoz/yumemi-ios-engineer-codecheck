@@ -5,8 +5,6 @@
 
 import SwiftUI
 
-/// 行をタップすると `Repository` を値として push する。遷移先は使う側が
-/// `navigationDestination(for: Repository.self)` で決めるため、この部品は遷移先の画面に依存しない。
 /// 値で遷移するため、詳細表示中に元の一覧から項目が消えても詳細画面は閉じない。
 struct RepositoryListView: View {
 

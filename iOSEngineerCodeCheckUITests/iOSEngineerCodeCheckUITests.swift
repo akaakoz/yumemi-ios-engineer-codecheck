@@ -48,7 +48,6 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["7,000 open issues"].exists)
     }
 
-    /// 旧実装から引き継いだ挙動を固定するテスト。
     /// 詳細画面のボタン表示は開いた時点のまま変わらず、Bookmark タブで Remove しても一覧からは消えない。
     func testBookmarkButtonBehaviorKeepsLegacyBehavior() throws {
         let app = try launchApp()
@@ -84,7 +83,6 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["検索ボタンをタップして"].waitForExistence(timeout: timeout))
     }
 
-    /// 旧実装と同じく、起動直後の案内文は検索欄をタップしただけでは消えない
     func testLaunchShowsGuideTextInSearchFieldAndTapKeepsIt() throws {
         let app = try launchApp()
         let field = app.textFields["repositorySearch.field"]
@@ -113,7 +111,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         search(app, keyword: "swift")
 
-        // 旧実装と同じく、失敗時は専用の表示をせず結果なしの案内文に戻る
+        // 失敗時は専用の表示をせず、結果なしの案内文に戻る
         XCTAssertTrue(app.staticTexts["GitHubのリポジトリを検索できるよー"].waitForExistence(timeout: timeout))
         XCTAssertFalse(app.activityIndicators.firstMatch.exists)
     }
@@ -143,7 +141,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     private func search(_ app: XCUIApplication, keyword: String) {
         let field = app.textFields["repositorySearch.field"]
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
-        // 起動直後の案内文はタップでは消えないため、旧実装と同じくタブを切り替えて消してから入力する
+        // 起動直後の案内文はタップでは消えないため、タブを切り替えて消してから入力する
         if field.value as? String == "GitHubのリポジトリを検索できるよー" {
             app.tabBars.buttons["Bookmark"].tap()
             app.tabBars.buttons["Search"].tap()

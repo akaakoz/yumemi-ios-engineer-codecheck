@@ -7,7 +7,7 @@ import Foundation
 
 struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
 
-    /// 保存先のキー。既存バージョンで保存されたブックマークを引き継ぐため、同じ値を使い続ける。
+    /// 保存済みのブックマークを読み込めるよう、値を変えないこと。
     static let storageKey = "data"
 
     /// 保存先の UserDefaults を別の領域（suite）に切り替えるキー（Debug ビルドのみ有効）。
@@ -38,7 +38,7 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
             return []
         }
         do {
-            // 旧実装は既定の JSONEncoder（camelCase のキー）で保存していたため、デコードもキー変換をしない
+            // 保存済みのデータは camelCase のキーで保存されているため、キー変換をしない
             return try JSONDecoder().decode([Bookmark].self, from: data)
         } catch {
             throw .loadFailed(description: String(describing: error))
