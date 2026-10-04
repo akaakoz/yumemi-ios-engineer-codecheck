@@ -29,7 +29,7 @@ struct MainTabView: View {
         }
         .tabItem {
             Image(systemName: "bookmark.fill")
-            Text(AppStrings.MainTab.bookmarkTab)
+            Text("Bookmark")
         }
         .tag(Tab.bookmark)
     }
@@ -40,7 +40,7 @@ struct MainTabView: View {
         }
         .tabItem {
             Image(systemName: "magnifyingglass.circle.fill")
-            Text(AppStrings.MainTab.searchTab)
+            Text("Search")
         }
         .tag(Tab.search)
     }

@@ -25,7 +25,7 @@ struct RepositorySearchView: View {
             .overlay {
                 statusOverlay
             }
-            .navigationTitle(AppStrings.RepositorySearch.navigationTitle)
+            .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(
@@ -68,7 +68,7 @@ struct RepositorySearchView: View {
             return $viewModel.query
         }
         return Binding(
-            get: { AppStrings.RepositorySearch.initialFieldText },
+            get: { "GitHubのリポジトリを検索できるよー" },
             set: { viewModel.updateQuery($0) }
         )
     }
@@ -78,7 +78,7 @@ struct RepositorySearchView: View {
         if viewModel.isSearching {
             ProgressView()
         } else if viewModel.repositories.isEmpty {
-            Text(AppStrings.RepositorySearch.emptyMessage)
+            Text("GitHubのリポジトリを検索できるよー")
                 .foregroundStyle(.secondary)
         }
     }

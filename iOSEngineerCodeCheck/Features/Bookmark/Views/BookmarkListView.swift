@@ -17,11 +17,11 @@ struct BookmarkListView: View {
         RepositoryListView(repositories: viewModel.bookmarks.map(\.repository))
             .overlay {
                 if viewModel.bookmarks.isEmpty {
-                    Text(AppStrings.BookmarkList.emptyMessage)
+                    Text("検索ボタンをタップして")
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle(AppStrings.BookmarkList.navigationTitle)
+            .navigationTitle("Bookmarks")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(

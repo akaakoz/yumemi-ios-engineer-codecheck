@@ -73,10 +73,10 @@ struct RepositoryDetailView: View {
             Spacer(minLength: 24)
 
             VStack(alignment: .trailing, spacing: 16) {
-                Text(AppStrings.RepositoryDetail.stars(repository.stargazersCount))
-                Text(AppStrings.RepositoryDetail.watchers(repository.watchersCount))
-                Text(AppStrings.RepositoryDetail.forks(repository.forksCount))
-                Text(AppStrings.RepositoryDetail.openIssues(repository.openIssuesCount))
+                Text("\(repository.stargazersCount) stars")
+                Text("\(repository.watchersCount) watchers")
+                Text("\(repository.forksCount) forks")
+                Text("\(repository.openIssuesCount) open issues")
             }
             .font(.subheadline)
         }
@@ -85,7 +85,7 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private var languageView: some View {
         if let language = repository.language {
-            Text(AppStrings.RepositoryDetail.writtenIn(language))
+            Text("Written in \(language)")
                 .font(.headline)
         }
     }
@@ -93,13 +93,13 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private var bookmarkButton: some View {
         if isShownAsBookmarked {
-            Button(AppStrings.RepositoryDetail.removeBookmark) {
+            Button("Remove from Bookmark") {
                 setBookmarked(false)
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
         } else {
-            Button(AppStrings.RepositoryDetail.addBookmark) {
+            Button("Add to Bookmark") {
                 setBookmarked(true)
             }
             .buttonStyle(.borderedProminent)
