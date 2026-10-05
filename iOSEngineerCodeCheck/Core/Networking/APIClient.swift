@@ -73,11 +73,13 @@ struct APIClient: APIClientProtocol {
         }
     }
 
-    /// - Note: `URLComponents` は `+` をエンコードしないため、`c++` は GitHub 側で `c` の検索として扱われる。
     func makeURLRequest<Request: APIRequest>(for request: Request) throws(APIError) -> URLRequest {
         var components = baseURL
         components.path = request.path
         components.queryItems = request.queryItems.isEmpty ? nil : request.queryItems
+        // URLComponents は `+` をエンコードしないが、GitHub はクエリの `+` を空白として扱うため `%2B` にする。
+        // 空白は `%20` にエンコードされるので、ここに残る `+` は入力された `+` だけ
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
 
         guard let url = components.url else {
             throw .invalidRequest

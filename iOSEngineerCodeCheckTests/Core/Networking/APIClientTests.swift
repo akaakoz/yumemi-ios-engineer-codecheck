@@ -29,6 +29,26 @@ struct APIClientTests {
         #expect(urlRequest.url?.absoluteString == "https://api.github.com/sample?q=swift%20ui%20%E6%97%A5%E6%9C%AC%E8%AA%9E")
     }
 
+    @Test(
+        "クエリの記号は GitHub で文字どおりに扱われるようエンコードする",
+        arguments: [
+            ("c++", "q=c%2B%2B"),
+            ("a+b c", "q=a%2Bb%20c"),
+            ("a&b", "q=a%26b"),
+            ("a=b", "q=a%3Db"),
+            ("a#b", "q=a%23b"),
+            ("a%2Bb", "q=a%252Bb"),
+        ]
+    )
+    func makeURLRequestEncodesSymbols(value: String, expectedQuery: String) throws {
+        let client = APIClient(baseURL: APIClient.gitHubBaseURL, session: StubNetworkSession.json("{}"))
+        let request = SampleRequest(queryItems: [URLQueryItem(name: "q", value: value)])
+
+        let urlRequest = try client.makeURLRequest(for: request)
+
+        #expect(urlRequest.url?.query(percentEncoded: true) == expectedQuery)
+    }
+
     @Test("snake_case のキーを camelCase のプロパティへデコードする")
     func sendDecodesSnakeCaseResponse() async throws {
         let client = APIClient(baseURL: APIClient.gitHubBaseURL, session: StubNetworkSession.json(#"{"full_name": "apple/swift"}"#))
