@@ -19,6 +19,8 @@ struct RepositorySearchView: View {
 
     var body: some View {
         RepositoryListView(repositories: viewModel.repositories)
+            // 検索中は前回の画面を操作できないようにする
+            .disabled(viewModel.phase == .loading)
             .safeAreaInset(edge: .top) {
                 searchHeader
             }

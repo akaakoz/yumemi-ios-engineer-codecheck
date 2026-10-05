@@ -48,6 +48,26 @@ struct RepositorySearchViewModelTests {
         #expect(viewModel.repositories.map(\.fullName) == ["apple/swift"])
     }
 
+    @Test("検索中は前回の結果を保持したまま loading になる")
+    func searchKeepsPreviousResultsWhileLoading() async {
+        let viewModel = makeViewModel()
+        viewModel.query = "first"
+        viewModel.search()
+        await service.waitForRequest(keyword: "first")
+        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await viewModel.searchTask?.value
+
+        viewModel.query = "second"
+        viewModel.search()
+        await service.waitForRequest(keyword: "second")
+
+        #expect(viewModel.phase == .loading)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
+
+        await service.respond(to: "second", with: .success([]))
+        await viewModel.searchTask?.value
+    }
+
     @Test("キーワードの前後の空白を取り除いて検索する")
     func searchTrimsKeyword() async {
         let viewModel = makeViewModel()

@@ -13,9 +13,11 @@ import XCTest
 /// アプリ側にスタブを用意しなくても、実際のネットワークに依存せずに検索の成功・失敗を再現できる。
 final class MockGitHubServer: Sendable {
 
-    enum Behavior: Sendable {
+    enum Behavior: Equatable, Sendable {
         /// 固定の検索結果（`searchResultsJSON`）を返す
         case success
+        /// 固定の検索結果を 2 秒遅れて返す（検索中の状態を確認するため）
+        case slowSuccess
         /// 結果 0 件を返す
         case noResults
         /// 検索 API が 500 を返す
@@ -61,9 +63,16 @@ final class MockGitHubServer: Sendable {
             let requestLine = data.flatMap { String(data: $0, encoding: .utf8) }?
                 .components(separatedBy: "\r\n").first ?? ""
             let response = makeResponse(requestLine: requestLine, behavior: behavior)
-            connection.send(content: response, completion: .contentProcessed { _ in
-                connection.cancel()
-            })
+            let send: @Sendable () -> Void = {
+                connection.send(content: response, completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+            }
+            if behavior == .slowSuccess {
+                queue.asyncAfter(deadline: .now() + 2, execute: send)
+            } else {
+                send()
+            }
         }
     }
 
@@ -74,7 +83,7 @@ final class MockGitHubServer: Sendable {
             return httpResponse(status: "404 Not Found", body: #"{"message": "Not Found"}"#)
         }
         switch behavior {
-        case .success:
+        case .success, .slowSuccess:
             return httpResponse(status: "200 OK", body: searchResultsJSON)
         case .noResults:
             return httpResponse(status: "200 OK", body: #"{"total_count": 0, "incomplete_results": false, "items": []}"#)

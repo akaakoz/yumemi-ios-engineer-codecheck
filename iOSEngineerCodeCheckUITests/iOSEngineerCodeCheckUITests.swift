@@ -105,6 +105,22 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
     }
 
+    func testResultsCannotBeTappedWhileSearching() throws {
+        let app = try launchApp(searchBehavior: .slowSuccess)
+        search(app, keyword: "swift")
+        let row = repositoryRow(app, fullName: "apple/swift")
+        XCTAssertTrue(row.waitForExistence(timeout: timeout))
+
+        search(app, keyword: "kotlin")
+
+        XCTAssertTrue(app.activityIndicators.firstMatch.exists)
+        XCTAssertFalse(row.isEnabled)
+
+        // 結果が返ると、再び操作できる
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: row)
+        wait(for: [enabled], timeout: timeout)
+    }
+
     func testSearchFailureShowsErrorMessage() throws {
         let app = try launchApp(searchBehavior: .serverError)
 
