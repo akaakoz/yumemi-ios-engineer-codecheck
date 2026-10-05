@@ -7,8 +7,8 @@ import Foundation
 
 protocol BookmarkStorageProtocol {
     /// 保存済みのブックマークを読み込む。一度も保存していない場合は空配列を返す。
-    func loadBookmarks() throws(BookmarkStorageError) -> [Bookmark]
-    func saveBookmarks(_ bookmarks: [Bookmark]) throws(BookmarkStorageError)
+    func loadBookmarks() throws(BookmarkStorageError) -> [Repository]
+    func saveBookmarks(_ bookmarks: [Repository]) throws(BookmarkStorageError)
 }
 
 enum BookmarkStorageError: Error, Equatable, Sendable {

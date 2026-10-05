@@ -7,7 +7,7 @@ import Foundation
 
 /// Codable 表現は 2 か所で使われる。
 /// - API レスポンスのデコード（`APIClient` が snake_case から変換する）
-/// - ブックマークの永続化（`Bookmark` が camelCase のまま保存する）
+/// - ブックマークの永続化（`UserDefaultsBookmarkStorage` が camelCase のまま保存する）
 ///
 /// - Important: プロパティ名を変えると保存済みのブックマークを読み込めなくなるため、変更時は移行処理を検討すること。
 struct Repository: Codable, Hashable, Identifiable, Sendable {

@@ -8,9 +8,7 @@ import Observation
 import os
 
 /// ブックマークは Bookmark タブとインスタンスを共有せず、保存先を通して同期する。
-/// - 登録済みかどうかは保存済みの一覧に含まれているかで決まり、`Bookmark.isMarked` は見ない。
-/// - 検索結果に含まれるブックマークは `isMarked` を true に戻して保存する。
-/// - 保存に失敗しても画面上の登録状態は変更後のまま残す。
+/// 登録済みかどうかは、保存済みの一覧に含まれているかで決まる。
 @MainActor
 @Observable
 final class RepositorySearchViewModel {
@@ -71,7 +69,6 @@ final class RepositorySearchViewModel {
                 guard !Task.isCancelled else { return }
                 repositories = result
                 phase = .loaded
-                remarkBookmarksInSearchResults()
             } catch {
                 guard !Task.isCancelled else { return }
                 logger.error("Search failed: \(String(describing: error), privacy: .public)")
@@ -130,11 +127,10 @@ final class RepositorySearchViewModel {
             return
         }
         if isBookmarked {
-            bookmarks.append(Bookmark(repository: repository, isMarked: true))
+            bookmarks.append(repository)
         } else {
             bookmarks.removeAll { $0.id == repository.id }
         }
-        remarkBookmarks(&bookmarks, in: repositories)
         saveBookmarks(bookmarks)
     }
 
@@ -147,30 +143,8 @@ final class RepositorySearchViewModel {
         phase = .idle
     }
 
-    /// 検索結果に含まれるブックマークの `isMarked` を true に戻し、変更があれば保存する。
-    private func remarkBookmarksInSearchResults() {
-        guard var bookmarks = readStoredBookmarks() else {
-            return
-        }
-        if remarkBookmarks(&bookmarks, in: repositories) {
-            saveBookmarks(bookmarks)
-        }
-    }
-
-    /// - Returns: 変更があった場合は true
-    @discardableResult
-    private func remarkBookmarks(_ bookmarks: inout [Bookmark], in searchResults: [Repository]) -> Bool {
-        let searchResultIDs = Set(searchResults.map(\.id))
-        var changed = false
-        for index in bookmarks.indices where searchResultIDs.contains(bookmarks[index].id) && !bookmarks[index].isMarked {
-            bookmarks[index].isMarked = true
-            changed = true
-        }
-        return changed
-    }
-
     /// - Returns: 読み込めなかった場合は `nil`（失敗は `bookmarkStorageError` とログに残す）
-    private func readStoredBookmarks() -> [Bookmark]? {
+    private func readStoredBookmarks() -> [Repository]? {
         do {
             return try bookmarkStorage.loadBookmarks()
         } catch {
@@ -180,7 +154,7 @@ final class RepositorySearchViewModel {
         }
     }
 
-    private func saveBookmarks(_ bookmarks: [Bookmark]) {
+    private func saveBookmarks(_ bookmarks: [Repository]) {
         do {
             try bookmarkStorage.saveBookmarks(bookmarks)
             bookmarkStorageError = nil

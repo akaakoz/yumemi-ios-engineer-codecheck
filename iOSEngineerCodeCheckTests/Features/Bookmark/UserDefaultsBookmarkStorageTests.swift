@@ -34,10 +34,7 @@ struct UserDefaultsBookmarkStorageTests {
     func saveAndLoadRoundTrip() throws {
         try withIsolatedUserDefaults { userDefaults in
             let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
-            let bookmarks: [Bookmark] = [
-                .fixture(fullName: "b/two"),
-                Bookmark(repository: .fixture(fullName: "a/one", language: nil), isMarked: false),
-            ]
+            let bookmarks: [Repository] = [.fixture(fullName: "b/two"), .fixture(fullName: "a/one", language: nil)]
 
             try storage.saveBookmarks(bookmarks)
             let loadedBookmarks = try storage.loadBookmarks()
@@ -46,7 +43,7 @@ struct UserDefaultsBookmarkStorageTests {
         }
     }
 
-    @Test("旧バージョンの保存形式を読み込める（marked が無い場合は未登録扱い）")
+    @Test("以前の保存形式を読み込み、marked: false（Bookmark タブで削除済み）の項目は除外する")
     func loadsLegacyFormat() throws {
         try withIsolatedUserDefaults { userDefaults in
             let legacyJSON = """
@@ -75,24 +72,24 @@ struct UserDefaultsBookmarkStorageTests {
 
             let bookmarks = try storage.loadBookmarks()
 
-            #expect(bookmarks.map(\.id) == ["apple/swift", "example/unmarked", "example/no-flag"])
-            #expect(bookmarks.map(\.isMarked) == [true, false, false])
-            #expect(bookmarks.first?.repository.openIssuesCount == 4)
+            #expect(bookmarks.map(\.id) == ["apple/swift", "example/no-flag"])
+            #expect(bookmarks.first?.openIssuesCount == 4)
         }
     }
 
-    @Test("旧バージョンと同じ形式（Repository の項目と marked を同じ階層に並べる）で保存する")
-    func savesInLegacyCompatibleFormat() throws {
+    @Test("Repository の各項目を camelCase のキーで保存し、marked は保存しない")
+    func savesRepositoryFieldsWithoutMarked() throws {
         try withIsolatedUserDefaults { userDefaults in
             let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
 
-            try storage.saveBookmarks([.fixture(fullName: "apple/swift", isMarked: false)])
+            try storage.saveBookmarks([.fixture(fullName: "apple/swift")])
 
             let data = try #require(userDefaults.data(forKey: UserDefaultsBookmarkStorage.storageKey))
             let json = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
             #expect(json.first?["fullName"] as? String == "apple/swift")
-            #expect(json.first?["marked"] as? Bool == false)
-            #expect(json.first?["owner"] is [String: Any])
+            #expect(json.first?["stargazersCount"] as? Int == 100)
+            #expect((json.first?["owner"] as? [String: Any])?["avatarUrl"] is String)
+            #expect(json.first?["marked"] == nil)
         }
     }
 

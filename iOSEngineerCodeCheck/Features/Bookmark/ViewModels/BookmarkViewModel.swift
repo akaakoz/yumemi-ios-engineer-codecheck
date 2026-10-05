@@ -7,13 +7,13 @@ import Foundation
 import Observation
 import os
 
-/// Search タブとはインスタンスを共有せず、保存先を通して同期する。
-/// `isMarked` の変更は保存しないため、読み込み直したときもすでに一覧にある項目はメモリ上の値を残す。
+/// Search タブとはインスタンスを共有せず、保存先を通して同期する。表示されるたびに `loadBookmarks()` で読み込み直す。
 @MainActor
 @Observable
 final class BookmarkViewModel {
 
-    private(set) var bookmarks: [Bookmark] = []
+    /// 追加した順に並ぶブックマーク
+    private(set) var bookmarks: [Repository] = []
     /// 画面には表示しない。原因調査とテストのために保持する。
     private(set) var storageError: BookmarkStorageError?
 
@@ -25,35 +25,38 @@ final class BookmarkViewModel {
     }
 
     func loadBookmarks() {
-        let storedBookmarks: [Bookmark]
         do {
-            storedBookmarks = try storage.loadBookmarks()
+            bookmarks = try storage.loadBookmarks()
             storageError = nil
         } catch {
             logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
             storageError = error
             bookmarks = []
-            return
-        }
-
-        let markedStates = Dictionary(bookmarks.map { ($0.id, $0.isMarked) }, uniquingKeysWith: { first, _ in first })
-        bookmarks = storedBookmarks.map { stored in
-            var bookmark = stored
-            if let isMarked = markedStates[stored.id] {
-                bookmark.isMarked = isMarked
-            }
-            return bookmark
         }
     }
 
-    func isMarked(_ repository: Repository) -> Bool {
-        bookmarks.first { $0.id == repository.id }?.isMarked == true
+    func isBookmarked(_ repository: Repository) -> Bool {
+        bookmarks.contains { $0.id == repository.id }
     }
 
-    func setMarked(_ repository: Repository, isMarked: Bool) {
-        guard let index = bookmarks.firstIndex(where: { $0.id == repository.id }) else {
+    /// 削除すると一覧から消えて保存される。詳細画面は値で遷移しているため表示されたままで、追加すると末尾に再登録される。
+    func setBookmarked(_ repository: Repository, isBookmarked: Bool) {
+        guard isBookmarked != self.isBookmarked(repository) else {
             return
         }
-        bookmarks[index].isMarked = isMarked
+
+        if isBookmarked {
+            bookmarks.append(repository)
+        } else {
+            bookmarks.removeAll { $0.id == repository.id }
+        }
+
+        do {
+            try storage.saveBookmarks(bookmarks)
+            storageError = nil
+        } catch {
+            logger.error("Failed to save bookmarks: \(String(describing: error), privacy: .public)")
+            storageError = error
+        }
     }
 }

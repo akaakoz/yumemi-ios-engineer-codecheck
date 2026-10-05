@@ -247,11 +247,10 @@ struct RepositorySearchViewModelTests {
 
     @Test("loadBookmarks で保存済みのブックマークを読み込み、登録済みかどうかを返す")
     func loadsBookmarkedState() throws {
-        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one", isMarked: false)])
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
 
         let viewModel = makeViewModel()
 
-        // Search タブから見た登録状態は isMarked ではなく、保存済みの一覧に含まれているかで決まる
         #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
         #expect(!viewModel.isBookmarked(.fixture(fullName: "b/two")))
     }
@@ -296,7 +295,7 @@ struct RepositorySearchViewModelTests {
 
     @Test("スター数などが変わっていても fullName が同じなら同じリポジトリとして扱う")
     func identifiesBookmarkByFullName() throws {
-        try bookmarkStorage.saveBookmarks([Bookmark(repository: .fixture(fullName: "apple/swift", stargazersCount: 1), isMarked: true)])
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "apple/swift", stargazersCount: 1)])
         let viewModel = makeViewModel()
         let latestSearchResult = Repository.fixture(fullName: "apple/swift", stargazersCount: 999)
 
@@ -305,27 +304,6 @@ struct RepositorySearchViewModelTests {
         viewModel.setBookmarked(latestSearchResult, isBookmarked: false)
 
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
-    }
-
-    @Test("検索結果に含まれるブックマークは isMarked を true に戻して保存する")
-    func searchResultsRemarkBookmarks() async throws {
-        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one", isMarked: false), .fixture(fullName: "b/two", isMarked: false)])
-        let viewModel = makeViewModel()
-
-        await search(viewModel, returning: [.fixture(fullName: "a/one"), .fixture(fullName: "c/three")])
-
-        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two", isMarked: false)])
-    }
-
-    @Test("検索結果で isMarked が変わらない場合は保存しない")
-    func searchResultsWithoutChangeDoNotSave() async throws {
-        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
-        let saveCountBefore = bookmarkStorage.saveCallCount
-        let viewModel = makeViewModel()
-
-        await search(viewModel, returning: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-
-        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
     }
 
     @Test("保存に失敗しても登録状態は変更後のまま残し、失敗を bookmarkStorageError として公開する")

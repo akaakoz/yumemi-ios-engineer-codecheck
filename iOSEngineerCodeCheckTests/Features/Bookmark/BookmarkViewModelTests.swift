@@ -15,7 +15,7 @@ struct BookmarkViewModelTests {
 
     @Test("生成しただけでは読み込まず、loadBookmarks で保存済みのブックマークを読み込む")
     func loadsSavedBookmarks() {
-        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two", isMarked: false)])
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
         let viewModel = BookmarkViewModel(storage: storage)
 
         #expect(viewModel.bookmarks.isEmpty)
@@ -26,7 +26,7 @@ struct BookmarkViewModelTests {
         #expect(viewModel.storageError == nil)
     }
 
-    @Test("読み込み直すと、保存先で追加・削除されたブックマークを反映する")
+    @Test("読み込み直すと、Search タブで追加・削除された内容を反映する")
     func reloadReflectsStorageChanges() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
         let viewModel = BookmarkViewModel(storage: storage)
@@ -37,18 +37,6 @@ struct BookmarkViewModelTests {
         viewModel.loadBookmarks()
 
         #expect(viewModel.bookmarks == [.fixture(fullName: "b/two"), .fixture(fullName: "c/three")])
-    }
-
-    @Test("読み込み直しても、すでに一覧にある項目は保存されていない isMarked の変更を残す")
-    func reloadKeepsUnsavedMarkedState() {
-        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
-        viewModel.loadBookmarks()
-        viewModel.setMarked(.fixture(fullName: "a/one"), isMarked: false)
-
-        viewModel.loadBookmarks()
-
-        #expect(viewModel.bookmarks == [.fixture(fullName: "a/one", isMarked: false), .fixture(fullName: "b/two")])
     }
 
     @Test("保存データを読み込めない場合は空にし、失敗を storageError として公開する")
@@ -64,52 +52,68 @@ struct BookmarkViewModelTests {
         #expect(viewModel.storageError == .loadFailed(description: "broken"))
     }
 
-    @Test("読み込みに成功すると直前の失敗はクリアされる")
-    func successfulLoadClearsError() {
-        let storage = InMemoryBookmarkStorage(loadError: .loadFailed(description: "broken"))
+    // MARK: - 追加・削除
+
+    @Test("削除すると一覧から消え、保存される")
+    func removeDeletesAndSaves() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        storage.loadError = nil
-        viewModel.loadBookmarks()
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
 
-        #expect(viewModel.storageError == nil)
+        #expect(viewModel.bookmarks == [.fixture(fullName: "b/two")])
+        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(storage.savedBookmarks == [.fixture(fullName: "b/two")])
     }
 
-    // MARK: - Bookmark タブでの操作
+    @Test("削除した後に追加し直すと、末尾に再登録されて保存される")
+    func reAddAppendsToEnd() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
 
-    @Test("Bookmark タブで削除しても一覧には残し、isMarked だけを false にして保存はしない")
-    func unmarkOnlyChangesFlag() {
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+
+        #expect(viewModel.bookmarks == [.fixture(fullName: "b/two"), .fixture(fullName: "a/one")])
+        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(storage.savedBookmarks == viewModel.bookmarks)
+    }
+
+    @Test("削除した内容は、読み込み直しても戻らない")
+    func removalSurvivesReload() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+
+        viewModel.loadBookmarks()
+
+        #expect(viewModel.bookmarks.isEmpty)
+    }
+
+    @Test("登録状態が変わらない操作では保存しない")
+    func noOpOperationDoesNotSave() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setMarked(.fixture(fullName: "a/one"), isMarked: false)
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.setBookmarked(.fixture(fullName: "b/two"), isBookmarked: false)
 
-        #expect(viewModel.bookmarks == [.fixture(fullName: "a/one", isMarked: false)])
-        #expect(!viewModel.isMarked(.fixture(fullName: "a/one")))
         #expect(storage.saveCallCount == 0)
     }
 
-    @Test("Bookmark タブで再度追加すると isMarked を true に戻す")
-    func remarkRestoresFlag() {
-        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one", isMarked: false)])
+    @Test("保存に失敗した場合は、失敗を storageError として公開する")
+    func exposesSaveFailure() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        storage.saveError = .saveFailed(description: "disk full")
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setMarked(.fixture(fullName: "a/one"), isMarked: true)
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
 
-        #expect(viewModel.isMarked(.fixture(fullName: "a/one")))
-        #expect(storage.saveCallCount == 0)
-    }
-
-    @Test("一覧に無いリポジトリを操作しても何もしない")
-    func operationForUnknownRepositoryIsIgnored() {
-        let viewModel = BookmarkViewModel(storage: InMemoryBookmarkStorage())
-        viewModel.loadBookmarks()
-
-        viewModel.setMarked(.fixture(fullName: "a/one"), isMarked: true)
-
-        #expect(viewModel.bookmarks.isEmpty)
+        #expect(viewModel.storageError == .saveFailed(description: "disk full"))
     }
 }

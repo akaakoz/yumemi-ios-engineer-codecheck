@@ -84,6 +84,52 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["検索ボタンをタップして"].waitForExistence(timeout: timeout))
     }
 
+    /// Bookmark タブで削除するとすぐ一覧から消え、詳細画面には留まって再登録でき、再起動後もその状態が保たれる
+    func testRemovingFromBookmarkTabDeletesImmediatelyAndPersists() throws {
+        let app = try launchApp()
+        let addButton = app.buttons["Add to Bookmark"]
+        let removeButton = app.buttons["Remove from Bookmark"]
+        let bookmarkRow = repositoryRow(app, fullName: "apple/swift")
+        let emptyMessage = app.staticTexts["検索ボタンをタップして"]
+
+        search(app, keyword: "swift")
+        repositoryRow(app, fullName: "apple/swift").tap()
+        addButton.tap()
+        app.tabBars.buttons["Bookmark"].tap()
+        XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
+
+        // 削除しても詳細画面に留まり、追加し直せる。一覧に戻ると再登録されている
+        bookmarkRow.tap()
+        removeButton.tap()
+        XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["apple/swift"].exists)
+        addButton.tap()
+        XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
+
+        // 再起動しても登録されたまま
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Bookmark"].tap()
+        XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
+
+        // 削除して一覧に戻ると、すぐに消えている
+        bookmarkRow.tap()
+        removeButton.tap()
+        XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(emptyMessage.waitForExistence(timeout: timeout))
+        XCTAssertFalse(bookmarkRow.exists)
+
+        // 再起動しても削除されたまま
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Bookmark"].tap()
+        XCTAssertTrue(emptyMessage.waitForExistence(timeout: timeout))
+        XCTAssertFalse(bookmarkRow.exists)
+    }
+
     func testSearchFieldShowsGuideAsPlaceholderAndKeepsOnlyTypedText() throws {
         let app = try launchApp()
         let field = app.textFields["repositorySearch.field"]

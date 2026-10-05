@@ -14,7 +14,7 @@ struct BookmarkListView: View {
     }
 
     var body: some View {
-        RepositoryListView(repositories: viewModel.bookmarks.map(\.repository))
+        RepositoryListView(repositories: viewModel.bookmarks)
             .overlay {
                 if viewModel.bookmarks.isEmpty {
                     Text("検索ボタンをタップして")
@@ -27,8 +27,8 @@ struct BookmarkListView: View {
                 RepositoryDetailView(
                     repository: repository,
                     isBookmarked: Binding(
-                        get: { viewModel.isMarked(repository) },
-                        set: { viewModel.setMarked(repository, isMarked: $0) }
+                        get: { viewModel.isBookmarked(repository) },
+                        set: { viewModel.setBookmarked(repository, isBookmarked: $0) }
                     )
                 )
             }
