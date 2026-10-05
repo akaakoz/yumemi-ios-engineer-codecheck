@@ -72,8 +72,8 @@ struct RepositorySearchView: View {
         case .loaded where viewModel.repositories.isEmpty:
             Text("該当するリポジトリがありません")
                 .foregroundStyle(.secondary)
-        case .failed:
-            Text("検索に失敗しました。時間をおいて再度お試しください。")
+        case .failed(let error):
+            Text(RepositorySearchViewModel.failureMessage(for: error))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)

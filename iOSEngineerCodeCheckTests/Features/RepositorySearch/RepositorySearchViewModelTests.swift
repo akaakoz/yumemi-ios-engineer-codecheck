@@ -211,6 +211,29 @@ struct RepositorySearchViewModelTests {
         #expect(viewModel.repositories.isEmpty)
     }
 
+    @Test(
+        "失敗の原因に応じた文言を返す",
+        arguments: [
+            (APIError.network(.notConnectedToInternet), "インターネットに接続されていません。接続を確認してから再度お試しください。"),
+            (APIError.network(.networkConnectionLost), "インターネットに接続されていません。接続を確認してから再度お試しください。"),
+            (APIError.network(.timedOut), "通信がタイムアウトしました。通信環境の良い場所で再度お試しください。"),
+            (APIError.network(.cannotFindHost), "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(403), "検索できる回数の上限に達しました。しばらく時間をおいて再度お試しください。"),
+            (APIError.httpStatus(429), "検索できる回数の上限に達しました。しばらく時間をおいて再度お試しください。"),
+            (APIError.httpStatus(422), "検索できないキーワードです。キーワードを見直してください。"),
+            (APIError.httpStatus(500), "GitHub で問題が発生しています。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(503), "GitHub で問題が発生しています。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(404), "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.decoding(description: "broken"), "予期しない応答を受け取りました。時間をおいて再度お試しください。"),
+            (APIError.invalidResponse, "予期しない応答を受け取りました。時間をおいて再度お試しください。"),
+            (APIError.invalidRequest, "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.unexpected(description: "unknown"), "検索に失敗しました。時間をおいて再度お試しください。"),
+        ]
+    )
+    func failureMessageDependsOnError(error: APIError, expectedMessage: String) {
+        #expect(RepositorySearchViewModel.failureMessage(for: error) == expectedMessage)
+    }
+
     // MARK: - ブックマーク
 
     @Test("生成しただけでは保存先を読み込まない")

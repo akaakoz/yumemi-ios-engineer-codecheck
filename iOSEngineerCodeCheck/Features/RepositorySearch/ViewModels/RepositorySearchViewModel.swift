@@ -82,6 +82,27 @@ final class RepositorySearchViewModel {
         }
     }
 
+    /// 検索に失敗したときに画面に表示する文言。原因に応じて、利用者が取れる対応が分かるようにする。
+    static func failureMessage(for error: APIError) -> String {
+        switch error {
+        case .network(.notConnectedToInternet), .network(.networkConnectionLost), .network(.dataNotAllowed):
+            return "インターネットに接続されていません。接続を確認してから再度お試しください。"
+        case .network(.timedOut):
+            return "通信がタイムアウトしました。通信環境の良い場所で再度お試しください。"
+        case .httpStatus(403), .httpStatus(429):
+            // GitHub の検索 API は回数制限を超えると 403 または 429 を返す
+            return "検索できる回数の上限に達しました。しばらく時間をおいて再度お試しください。"
+        case .httpStatus(422):
+            return "検索できないキーワードです。キーワードを見直してください。"
+        case .httpStatus(500...599):
+            return "GitHub で問題が発生しています。時間をおいて再度お試しください。"
+        case .decoding, .invalidResponse:
+            return "予期しない応答を受け取りました。時間をおいて再度お試しください。"
+        case .network, .httpStatus, .invalidRequest, .unexpected:
+            return "検索に失敗しました。時間をおいて再度お試しください。"
+        }
+    }
+
     // MARK: - ブックマーク
     func loadBookmarks() {
         guard let bookmarks = readStoredBookmarks() else {

@@ -126,7 +126,8 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         search(app, keyword: "swift")
 
-        XCTAssertTrue(app.staticTexts["検索に失敗しました。時間をおいて再度お試しください。"].waitForExistence(timeout: timeout))
+        // モックサーバーは 500 を返すので、GitHub 側の障害として表示される
+        XCTAssertTrue(app.staticTexts["GitHub で問題が発生しています。時間をおいて再度お試しください。"].waitForExistence(timeout: timeout))
         XCTAssertFalse(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
         XCTAssertFalse(app.activityIndicators.firstMatch.exists)
     }
