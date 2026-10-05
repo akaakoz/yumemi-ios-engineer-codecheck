@@ -26,10 +26,11 @@ struct BookmarkListView: View {
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(
                     repository: repository,
-                    isShownAsBookmarked: viewModel.isMarked(repository)
-                ) { isMarked in
-                    viewModel.setMarked(repository, isMarked: isMarked)
-                }
+                    isBookmarked: Binding(
+                        get: { viewModel.isMarked(repository) },
+                        set: { viewModel.setMarked(repository, isMarked: $0) }
+                    )
+                )
             }
             .onAppear {
                 viewModel.loadBookmarks()

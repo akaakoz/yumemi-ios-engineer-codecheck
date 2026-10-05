@@ -32,10 +32,11 @@ struct RepositorySearchView: View {
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(
                     repository: repository,
-                    isShownAsBookmarked: viewModel.isBookmarked(repository)
-                ) { isBookmarked in
-                    viewModel.setBookmarked(repository, isBookmarked: isBookmarked)
-                }
+                    isBookmarked: Binding(
+                        get: { viewModel.isBookmarked(repository) },
+                        set: { viewModel.setBookmarked(repository, isBookmarked: $0) }
+                    )
+                )
             }
             .onAppear {
                 viewModel.loadBookmarks()

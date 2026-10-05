@@ -48,38 +48,39 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["7,000 open issues"].exists)
     }
 
-    /// 詳細画面のボタン表示は開いた時点のまま変わらず、Bookmark タブで Remove しても一覧からは消えない。
-    func testBookmarkButtonBehaviorKeepsLegacyBehavior() throws {
+    /// 詳細画面のボタン表示が、押すたびに登録状態に合わせて切り替わる（Search タブ・Bookmark タブとも）
+    func testDetailBookmarkButtonReflectsBookmarkState() throws {
         let app = try launchApp()
+        let addButton = app.buttons["Add to Bookmark"]
+        let removeButton = app.buttons["Remove from Bookmark"]
 
-        // Search タブで追加すると、ボタン表示は Add のままだがブックマークには追加される
+        // Search タブの詳細画面
         search(app, keyword: "swift")
         repositoryRow(app, fullName: "apple/swift").tap()
-        app.buttons["Add to Bookmark"].tap()
-        XCTAssertTrue(app.buttons["Add to Bookmark"].exists)
+        addButton.tap()
+        XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
+        removeButton.tap()
+        XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
+        addButton.tap()
+        XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
 
+        // Bookmark タブの詳細画面
         app.tabBars.buttons["Bookmark"].tap()
         let bookmarkRow = repositoryRow(app, fullName: "apple/swift")
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
-
-        // Bookmark タブで Remove しても、ボタン表示は Remove のままで一覧にも残る
         bookmarkRow.tap()
-        app.buttons["Remove from Bookmark"].tap()
-        XCTAssertTrue(app.buttons["Remove from Bookmark"].exists)
-        app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
+        XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
+        removeButton.tap()
+        XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
+        addButton.tap()
+        XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
 
-        // 開き直すと Add 表示になる
-        bookmarkRow.tap()
-        XCTAssertTrue(app.buttons["Add to Bookmark"].waitForExistence(timeout: timeout))
-        app.navigationBars.buttons.firstMatch.tap()
-
-        // Search タブの詳細を開き直すと Remove 表示になり、押すとブックマークから削除される
+        // Search タブの詳細画面で削除すると、Bookmark タブの一覧からも消える
         app.tabBars.buttons["Search"].tap()
-        app.navigationBars.buttons.firstMatch.tap()
-        repositoryRow(app, fullName: "apple/swift").tap()
-        app.buttons["Remove from Bookmark"].tap()
+        removeButton.tap()
+        XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         app.tabBars.buttons["Bookmark"].tap()
+        app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["検索ボタンをタップして"].waitForExistence(timeout: timeout))
     }
 

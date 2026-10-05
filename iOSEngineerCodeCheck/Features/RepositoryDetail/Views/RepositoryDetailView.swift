@@ -8,22 +8,9 @@ import SwiftUI
 struct RepositoryDetailView: View {
 
     let repository: Repository
-    /// ボタンを押したときに呼ぶ。引数は登録するなら true、削除するなら false
-    let setBookmarked: @MainActor (Bool) -> Void
-
-    /// 画面を開いた時点の登録状態。`@State` にすることで、その後の状態変化でボタン表示が変わらないようにしている
-    // TODO: - 既存の動きを担保するために設定してるので、修正時にStateを外す
-    @State private var isShownAsBookmarked: Bool
-
-    init(
-        repository: Repository,
-        isShownAsBookmarked: Bool,
-        setBookmarked: @escaping @MainActor (Bool) -> Void
-    ) {
-        self.repository = repository
-        self.setBookmarked = setBookmarked
-        _isShownAsBookmarked = State(initialValue: isShownAsBookmarked)
-    }
+    /// 登録状態。呼び出し側の ViewModel の状態を読み書きし、ボタンを押すと追加・削除を依頼する。
+    /// 保存に失敗した場合など、状態が変わらなければボタンの表示も変わらない。
+    @Binding var isBookmarked: Bool
 
     var body: some View {
         ScrollView {
@@ -92,15 +79,15 @@ struct RepositoryDetailView: View {
 
     @ViewBuilder
     private var bookmarkButton: some View {
-        if isShownAsBookmarked {
+        if isBookmarked {
             Button("Remove from Bookmark") {
-                setBookmarked(false)
+                isBookmarked = false
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
         } else {
             Button("Add to Bookmark") {
-                setBookmarked(true)
+                isBookmarked = true
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
