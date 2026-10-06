@@ -17,7 +17,7 @@ struct RepositorySearchViewModelTests {
 
     /// 画面が表示された状態の ViewModel
     private func makeViewModel() -> RepositorySearchViewModel {
-        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkService: BookmarkService(storage: bookmarkStorage))
         viewModel.loadBookmarks()
         return viewModel
     }
@@ -483,7 +483,7 @@ struct RepositorySearchViewModelTests {
     func initDoesNotReadStorage() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
 
-        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkService: BookmarkService(storage: bookmarkStorage))
 
         #expect(!viewModel.isBookmarked(fullName: "a/one"))
     }

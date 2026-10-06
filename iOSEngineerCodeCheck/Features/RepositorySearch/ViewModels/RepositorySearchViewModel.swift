@@ -76,15 +76,15 @@ final class RepositorySearchViewModel {
     private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
     private let apiService: RepositorySearchAPIServiceProtocol
-    private let bookmarkStorage: BookmarkStorageProtocol
+    private let bookmarkService: BookmarkServiceProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositorySearch")
 
     init(
         apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService(),
-        bookmarkStorage: BookmarkStorageProtocol = UserDefaultsBookmarkStorage()
+        bookmarkService: BookmarkServiceProtocol = BookmarkService()
     ) {
         self.apiService = apiService
-        self.bookmarkStorage = bookmarkStorage
+        self.bookmarkService = bookmarkService
     }
 
     func search() {
@@ -154,10 +154,12 @@ final class RepositorySearchViewModel {
 
     // MARK: - ブックマーク
     func loadBookmarks() {
-        guard let bookmarks = readStoredBookmarks() else {
-            return
+        do {
+            bookmarkedRepositoryIDs = Set(try bookmarkService.loadBookmarks().map(\.id))
+        } catch {
+            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
+            bookmarkStorageError = error
         }
-        bookmarkedRepositoryIDs = Set(bookmarks.map(\.id))
     }
 
     func isBookmarked(fullName: String) -> Bool {
@@ -166,35 +168,15 @@ final class RepositorySearchViewModel {
 
     /// 詳細画面で取得した `RepositoryDetail` をブックマークに追加する。
     func addBookmark(_ repositoryDetail: RepositoryDetail) {
-        guard let storedBookmarks = readStoredBookmarks() else {
-            return
+        updateBookmarks { () throws(BookmarkStorageError) in
+            try bookmarkService.addBookmark(repositoryDetail)
         }
-        guard !storedBookmarks.contains(where: { $0.fullName == repositoryDetail.fullName }) else {
-            // Bookmark タブで追加済みの場合は、重複して保存せずに登録状態だけ保存先に合わせる
-            bookmarkedRepositoryIDs = Set(storedBookmarks.map(\.id))
-            return
-        }
-        let updatedBookmarks = storedBookmarks + [repositoryDetail]
-        guard saveBookmarks(updatedBookmarks) else {
-            return
-        }
-        bookmarkedRepositoryIDs = Set(updatedBookmarks.map(\.id))
     }
 
     func removeBookmark(fullName: String) {
-        guard let storedBookmarks = readStoredBookmarks() else {
-            return
+        updateBookmarks { () throws(BookmarkStorageError) in
+            try bookmarkService.removeBookmark(fullName: fullName)
         }
-        guard storedBookmarks.contains(where: { $0.fullName == fullName }) else {
-            // Bookmark タブで削除済みの場合は、保存し直さずに登録状態だけ保存先に合わせる
-            bookmarkedRepositoryIDs = Set(storedBookmarks.map(\.id))
-            return
-        }
-        let updatedBookmarks = storedBookmarks.filter { $0.fullName != fullName }
-        guard saveBookmarks(updatedBookmarks) else {
-            return
-        }
-        bookmarkedRepositoryIDs = Set(updatedBookmarks.map(\.id))
     }
 
     // MARK: - Private
@@ -241,27 +223,14 @@ final class RepositorySearchViewModel {
         return repositories.filter { seenIDs.insert($0.id).inserted }
     }
 
-    /// - Returns: 読み込めなかった場合は `nil`（失敗は `bookmarkStorageError` とログに残す）
-    private func readStoredBookmarks() -> [RepositoryDetail]? {
+    /// 成功したときだけ登録状態を保存先の内容に合わせ、失敗したときは変えずに `bookmarkStorageError` とログに残す。
+    private func updateBookmarks(_ update: () throws(BookmarkStorageError) -> [RepositoryDetail]) {
         do {
-            return try bookmarkStorage.loadBookmarks()
-        } catch {
-            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
-            bookmarkStorageError = error
-            return nil
-        }
-    }
-
-    /// - Returns: 保存に成功した場合は true（失敗は `bookmarkStorageError` とログに残す）
-    private func saveBookmarks(_ bookmarks: [RepositoryDetail]) -> Bool {
-        do {
-            try bookmarkStorage.saveBookmarks(bookmarks)
+            bookmarkedRepositoryIDs = Set(try update().map(\.id))
             bookmarkStorageError = nil
-            return true
         } catch {
-            logger.error("Failed to save bookmarks: \(String(describing: error), privacy: .public)")
+            logger.error("Failed to update bookmarks: \(String(describing: error), privacy: .public)")
             bookmarkStorageError = error
-            return false
         }
     }
 }
