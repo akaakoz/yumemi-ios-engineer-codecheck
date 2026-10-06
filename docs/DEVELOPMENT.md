@@ -40,7 +40,7 @@ scripts/harness.sh check
 | `scripts/harness.sh check` | build → unit | 1〜2 分 | 変更のたびに実行する |
 | `scripts/harness.sh all` | build → unit → ui | 5〜7 分 | 画面の動きに関わる変更の後、PR を出す前。CI はこれを実行する |
 | `scripts/harness.sh build` | アプリとテストのビルド（SwiftLint の検査を含む。警告もエラーとして扱う） | | |
-| `scripts/harness.sh unit` / `ui` | ユニットテスト / UI テスト（build の後に実行する） | | 特定の種類だけ実行し直したいとき |
+| `scripts/harness.sh unit` / `ui` | build → unit / build → ui | | 特定の種類のテストだけを実行したいとき |
 
 ### それぞれで分かること
 

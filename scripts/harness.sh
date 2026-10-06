@@ -35,8 +35,8 @@ usage() {
   check   変更後に毎回実行する: build → unit
   all     check に加えて UI テストも実行する（CI で使う）
   build   アプリとテストをビルドする（SwiftLint の検査を含む。警告もエラーとして扱う）
-  unit    ユニットテストを実行する（build の後に実行する）
-  ui      UI テストを実行する（build の後に実行する）
+  unit    build してからユニットテストだけを実行する
+  ui      build してから UI テストだけを実行する
   help    この説明を表示する
 
 環境変数:
@@ -230,7 +230,10 @@ main() {
     case "$command" in
         check) run_steps build unit ;;
         all) run_steps build unit ui ;;
-        build | unit | ui) run_steps "$command" ;;
+        build) run_steps build ;;
+        # 古いビルドのままテストしないよう、テストは常に build してから実行する（変更が無ければ build は数秒で終わる）
+        unit) run_steps build unit ;;
+        ui) run_steps build ui ;;
         help | -h | --help) usage ;;
         *)
             usage >&2
