@@ -417,16 +417,23 @@ struct RepositorySearchViewModelTests {
 
 /// 検索のリクエストを、キーワードで待機・応答できるようにする
 private extension StubAPIClient {
-    func waitForRequest(keyword: String) async {
-        await waitForRequest(RepositorySearchRequest(keyword: keyword))
+    func waitForRequest(keyword: String, page: Int = 1) async {
+        await waitForRequest(RepositorySearchRequest(keyword: keyword, page: page))
     }
 
-    func respond(to keyword: String, with result: Result<[Repository], APIError>) {
-        respond(to: RepositorySearchRequest(keyword: keyword), with: result.map(RepositorySearchResponse.init(items:)))
+    /// - Parameter totalCount: 全件数。省略した場合は、このページの件数（次のページなし）
+    func respond(to keyword: String, page: Int = 1, totalCount: Int? = nil, with result: Result<[Repository], APIError>) {
+        respond(
+            to: RepositorySearchRequest(keyword: keyword, page: page),
+            with: result.map { RepositorySearchResponse(totalCount: totalCount ?? $0.count, items: $0) }
+        )
     }
 
+    /// 検索リクエストのキーワードを、受け取った順に並べたもの
     var requestedKeywords: [String] {
-        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: ""))
-        return requestedKeys.filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
+        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: "", page: 1)).prefix { $0 != "=" } + "="
+        return requestedKeys
+            .filter { $0.hasPrefix(prefix) }
+            .map { String($0.dropFirst(prefix.count).prefix { $0 != "&" }) }
     }
 }

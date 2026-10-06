@@ -73,7 +73,7 @@ final class RepositorySearchViewModel {
 
         searchTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: keyword)
+                let result = try await apiService.searchRepositories(keyword: keyword, page: 1).repositories
                 // キャンセル済み = より新しい検索が始まっている、またはクリアされたので結果を反映しない
                 guard !Task.isCancelled else { return }
                 repositories = result
