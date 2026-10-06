@@ -111,7 +111,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
 
         // 再起動しても登録されたまま
-        app.terminate()
+        terminate(app)
         app.launch()
         app.tabBars.buttons["Bookmark"].tap()
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
@@ -125,7 +125,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(bookmarkRow.exists)
 
         // 再起動しても削除されたまま
-        app.terminate()
+        terminate(app)
         app.launch()
         app.tabBars.buttons["Bookmark"].tap()
         XCTAssertTrue(emptyMessage.waitForExistence(timeout: timeout))
@@ -193,7 +193,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         repositoryRow(app, fullName: "apple/swift").tap()
         tapWhenEnabled(app.buttons["Add to Bookmark"])
         XCTAssertTrue(app.buttons["Remove from Bookmark"].waitForExistence(timeout: timeout))
-        app.terminate()
+        terminate(app)
 
         // 同じ保存先のまま、リポジトリ API が失敗する状態で起動し直す。通信していればエラーが表示される
         let failingApp = try launchApp(searchBehavior: .detailServerError, bookmarkStorageSuiteName: bookmarkStorageSuiteName)
@@ -241,6 +241,13 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
             + LaunchOption.fixedLocale
         app.launch()
         return app
+    }
+
+    /// アプリを終了し、終了しきったことを確かめる。
+    /// 終了しきる前に起動し直すと、CI のような遅い環境で起動が時間切れになることがあるため。
+    private func terminate(_ app: XCUIApplication) {
+        app.terminate()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: timeout), "アプリが終了しませんでした")
     }
 
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {
