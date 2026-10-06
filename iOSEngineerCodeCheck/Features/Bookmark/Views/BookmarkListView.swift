@@ -14,7 +14,7 @@ struct BookmarkListView: View {
     }
 
     var body: some View {
-        RepositoryListView(repositories: viewModel.bookmarks.map(\.repository))
+        RepositoryListView(items: viewModel.bookmarks)
             .overlay {
                 if viewModel.bookmarks.isEmpty {
                     Text("検索ボタンをタップして")
@@ -23,16 +23,26 @@ struct BookmarkListView: View {
             }
             .navigationTitle("Bookmarks")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Repository.self) { repository in
+            .navigationDestination(for: RepositoryDetail.self) { bookmark in
+                // ブックマークから開いた詳細は保存している値だけで表示し、通信しない
                 RepositoryDetailView(
-                    repository: repository,
-                    isShownAsBookmarked: viewModel.isMarked(repository)
-                ) { isMarked in
-                    viewModel.setMarked(repository, isMarked: isMarked)
-                }
+                    source: .saved(bookmark),
+                    isBookmarked: { viewModel.isBookmarked(fullName: bookmark.fullName) },
+                    addBookmark: { viewModel.addBookmark($0) },
+                    removeBookmark: { viewModel.removeBookmark(fullName: bookmark.fullName) }
+                )
             }
             .onAppear {
                 viewModel.loadBookmarks()
+            }
+            .alert(
+                "ブックマーク",
+                isPresented: $viewModel.isShowingStorageError,
+                presenting: viewModel.storageError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error.message)
             }
     }
 }

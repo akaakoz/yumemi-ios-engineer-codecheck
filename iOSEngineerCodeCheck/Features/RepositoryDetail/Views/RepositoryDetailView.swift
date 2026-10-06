@@ -6,35 +6,30 @@
 import SwiftUI
 
 struct RepositoryDetailView: View {
+    /// 保存に失敗した場合など、状態が変わらなければボタンの表示も変わらない。
+    let isBookmarked: @MainActor () -> Bool
+    let addBookmark: @MainActor (RepositoryDetail) -> Void
+    let removeBookmark: @MainActor () -> Void
 
-    let repository: Repository
-    /// ボタンを押したときに呼ぶ。引数は登録するなら true、削除するなら false
-    let setBookmarked: @MainActor (Bool) -> Void
-
-    /// 画面を開いた時点の登録状態。`@State` にすることで、その後の状態変化でボタン表示が変わらないようにしている
-    // TODO: - 既存の動きを担保するために設定してるので、修正時にStateを外す
-    @State private var isShownAsBookmarked: Bool
+    @State private var viewModel: RepositoryDetailViewModel
 
     init(
-        repository: Repository,
-        isShownAsBookmarked: Bool,
-        setBookmarked: @escaping @MainActor (Bool) -> Void
+        source: RepositoryDetailViewModel.Source,
+        isBookmarked: @escaping @MainActor () -> Bool,
+        addBookmark: @escaping @MainActor (RepositoryDetail) -> Void,
+        removeBookmark: @escaping @MainActor () -> Void,
+        apiService: RepositoryDetailAPIServiceProtocol = RepositoryDetailAPIService()
     ) {
-        self.repository = repository
-        self.setBookmarked = setBookmarked
-        _isShownAsBookmarked = State(initialValue: isShownAsBookmarked)
+        self.isBookmarked = isBookmarked
+        self.addBookmark = addBookmark
+        self.removeBookmark = removeBookmark
+        _viewModel = State(initialValue: RepositoryDetailViewModel(source: source, apiService: apiService))
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
-                avatarView
-
-                Text(repository.fullName)
-                    .font(.title)
-                    .multilineTextAlignment(.center)
-
-                summaryView
+                detailContent
 
                 bookmarkButton
             }
@@ -43,10 +38,35 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.loadRepositoryDetail()
+        }
     }
 
-    private var avatarView: some View {
-        AsyncImage(url: repository.owner.avatarURL) { phase in
+    @ViewBuilder
+    private var detailContent: some View {
+        switch viewModel.phase {
+        case .loading:
+            titleView(viewModel.fullName)
+            ProgressView()
+        case .loaded(let detail):
+            avatarView(detail.owner.avatarURL)
+            titleView(detail.fullName)
+            summaryView(detail)
+        case .failed(let error):
+            titleView(viewModel.fullName)
+            failureView(error)
+        }
+    }
+
+    private func titleView(_ fullName: String) -> some View {
+        Text(fullName)
+            .font(.title)
+            .multilineTextAlignment(.center)
+    }
+
+    private func avatarView(_ url: URL?) -> some View {
+        AsyncImage(url: url) { phase in
             switch phase {
             case .success(let image):
                 image
@@ -66,45 +86,69 @@ struct RepositoryDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var summaryView: some View {
-        HStack(alignment: .top) {
-            languageView
-
-            Spacer(minLength: 24)
+    private func summaryView(_ detail: RepositoryDetail) -> some View {
+        VStack(spacing: 16) {
+            if let language = detail.language {
+                Text("Written in \(language)")
+                    .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             VStack(alignment: .trailing, spacing: 16) {
-                Text("\(repository.stargazersCount) stars")
-                Text("\(repository.watchersCount) watchers")
-                Text("\(repository.forksCount) forks")
-                Text("\(repository.openIssuesCount) open issues")
+                Text("\(detail.stargazersCount) stars")
+                watchersCountView(detail.subscribersCount)
+                Text("\(detail.forksCount) forks")
+                Text("\(detail.openIssuesCount) open issues")
             }
             .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
+    /// Watch 数を保存していなかった以前の形式のブックマークでは `nil` になり、その場合は行ごと表示しない
     @ViewBuilder
-    private var languageView: some View {
-        if let language = repository.language {
-            Text("Written in \(language)")
-                .font(.headline)
+    private func watchersCountView(_ subscribersCount: Int?) -> some View {
+        if let subscribersCount {
+            Text("\(subscribersCount) watchers")
+        }
+    }
+
+    private func failureView(_ error: APIError) -> some View {
+        VStack(spacing: 12) {
+            Text(RepositoryDetailViewModel.failureMessage(for: error))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            reloadButton
+        }
+    }
+
+    private var reloadButton: some View {
+        Button("再読み込み") {
+            Task {
+                await viewModel.loadRepositoryDetail()
+            }
         }
     }
 
     @ViewBuilder
     private var bookmarkButton: some View {
-        if isShownAsBookmarked {
+        if isBookmarked() {
             Button("Remove from Bookmark") {
-                setBookmarked(false)
+                removeBookmark()
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
         } else {
             Button("Add to Bookmark") {
-                setBookmarked(true)
+                if let detail = viewModel.loadedDetail {
+                    addBookmark(detail)
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
+            .disabled(viewModel.loadedDetail == nil)
         }
     }
-
 }

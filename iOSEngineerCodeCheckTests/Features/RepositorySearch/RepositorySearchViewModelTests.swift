@@ -11,15 +11,14 @@ import Testing
 @Suite("RepositorySearchViewModel")
 struct RepositorySearchViewModelTests {
 
-    private let service = ControllableRepositorySearchService()
+    private let apiClient = StubAPIClient()
     /// 端末の UserDefaults を使わないよう、ブックマークはインメモリの保存先に読み書きする
     private let bookmarkStorage = InMemoryBookmarkStorage()
 
-    /// 画面が表示され、案内文を閉じて入力できる状態の ViewModel
+    /// 画面が表示された状態の ViewModel
     private func makeViewModel() -> RepositorySearchViewModel {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
         viewModel.loadBookmarks()
-        viewModel.dismissInitialGuide()
         return viewModel
     }
 
@@ -27,70 +26,46 @@ struct RepositorySearchViewModelTests {
     private func search(_ viewModel: RepositorySearchViewModel, returning results: [Repository]) async {
         viewModel.query = "keyword"
         viewModel.search()
-        await service.waitForRequest(keyword: "keyword")
-        await service.respond(to: "keyword", with: .success(results))
+        await apiClient.waitForRequest(keyword: "keyword")
+        await apiClient.respond(to: "keyword", with: .success(results))
         await viewModel.searchTask?.value
     }
 
-    @Test("起動直後は案内文を表示し、表示中は検索しない")
-    func initialGuideBlocksSearch() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-        viewModel.query = "swift"
-
-        viewModel.search()
-
-        #expect(viewModel.isShowingInitialGuide)
-        #expect(viewModel.searchTask == nil)
-        #expect(await service.requestedKeywords.isEmpty)
-    }
-
-    @Test("案内文の表示中に編集すると、案内文を含む文字列が入力値になり検索できる")
-    func editingInitialGuideBecomesQuery() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-        let editedText = "GitHubのリポジトリを検索できるよーswift"
-
-        viewModel.updateQuery(editedText)
-        viewModel.search()
-        await service.waitForRequest(keyword: editedText)
-        await service.respond(to: editedText, with: .success([]))
-        await viewModel.searchTask?.value
-
-        #expect(!viewModel.isShowingInitialGuide)
-        #expect(viewModel.query == editedText)
-        #expect(await service.requestedKeywords == [editedText])
-    }
-
-    @Test("案内文を閉じると検索できる")
-    func dismissingInitialGuideEnablesSearch() async {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
-
-        viewModel.dismissInitialGuide()
-        viewModel.query = "swift"
-        viewModel.search()
-        await service.waitForRequest(keyword: "swift")
-        await service.respond(to: "swift", with: .success([]))
-        await viewModel.searchTask?.value
-
-        #expect(!viewModel.isShowingInitialGuide)
-        #expect(await service.requestedKeywords == ["swift"])
-    }
-
-    @Test("検索中は isSearching が true になり、成功すると結果を反映して false に戻る")
+    @Test("検索中は loading になり、成功すると結果を反映して loaded になる")
     func searchSuccess() async {
         let viewModel = makeViewModel()
         viewModel.query = "swift"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "swift")
+        await apiClient.waitForRequest(keyword: "swift")
 
-        #expect(viewModel.isSearching)
+        #expect(viewModel.phase == .loading)
 
-        await service.respond(to: "swift", with: .success([.fixture(fullName: "apple/swift")]))
+        await apiClient.respond(to: "swift", with: .success([.fixture(fullName: "apple/swift")]))
         await viewModel.searchTask?.value
 
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["apple/swift"])
-        #expect(viewModel.searchError == nil)
+    }
+
+    @Test("検索中は前回の結果を保持したまま loading になる")
+    func searchKeepsPreviousResultsWhileLoading() async {
+        let viewModel = makeViewModel()
+        viewModel.query = "first"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await viewModel.searchTask?.value
+
+        viewModel.query = "second"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "second")
+
+        #expect(viewModel.phase == .loading)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
+
+        await apiClient.respond(to: "second", with: .success([]))
+        await viewModel.searchTask?.value
     }
 
     @Test("キーワードの前後の空白を取り除いて検索する")
@@ -99,11 +74,11 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "  swift \n"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "swift")
-        await service.respond(to: "swift", with: .success([]))
+        await apiClient.waitForRequest(keyword: "swift")
+        await apiClient.respond(to: "swift", with: .success([]))
         await viewModel.searchTask?.value
 
-        #expect(await service.requestedKeywords == ["swift"])
+        #expect(await apiClient.requestedKeywords == ["swift"])
     }
 
     @Test("空白だけのキーワードでは検索しない", arguments: ["", "   ", "\n"])
@@ -114,62 +89,59 @@ struct RepositorySearchViewModelTests {
         viewModel.search()
 
         #expect(viewModel.searchTask == nil)
-        #expect(!viewModel.isSearching)
-        #expect(await service.requestedKeywords.isEmpty)
+        #expect(viewModel.phase == .idle)
+        #expect(await apiClient.requestedKeywords.isEmpty)
     }
 
-    @Test("結果 0 件の場合は空の結果としてエラーなしで終わる")
+    @Test("結果 0 件の場合は空の結果で loaded になり、未検索（idle）と区別できる")
     func searchWithNoResults() async {
         let viewModel = makeViewModel()
         viewModel.query = "no-hit"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "no-hit")
-        await service.respond(to: "no-hit", with: .success([]))
+        await apiClient.waitForRequest(keyword: "no-hit")
+        await apiClient.respond(to: "no-hit", with: .success([]))
         await viewModel.searchTask?.value
 
         #expect(viewModel.repositories.isEmpty)
-        #expect(viewModel.searchError == nil)
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
     }
 
-    @Test("失敗した場合はエラーを公開し、前回の結果は残す")
-    func searchFailureKeepsPreviousResults() async {
+    @Test("失敗した場合は failed になり、前回の結果は消す")
+    func searchFailureClearsPreviousResults() async {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
-        await service.waitForRequest(keyword: "second")
-        await service.respond(to: "second", with: .failure(.network(.notConnectedToInternet)))
+        await apiClient.waitForRequest(keyword: "second")
+        await apiClient.respond(to: "second", with: .failure(.network(.notConnectedToInternet)))
         await viewModel.searchTask?.value
 
-        #expect(viewModel.searchError == .network(.notConnectedToInternet))
-        #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .failed(.network(.notConnectedToInternet)))
+        #expect(viewModel.repositories.isEmpty)
     }
 
-    @Test("次の検索を始めると前回のエラーはクリアされる")
+    @Test("失敗の後に次の検索を始めると loading になる")
     func newSearchClearsPreviousError() async {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .failure(.httpStatus(500)))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .failure(.httpStatus(500)))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
 
-        #expect(viewModel.searchError == nil)
-        #expect(viewModel.isSearching)
+        #expect(viewModel.phase == .loading)
 
-        await service.waitForRequest(keyword: "second")
-        await service.respond(to: "second", with: .success([]))
+        await apiClient.waitForRequest(keyword: "second")
+        await apiClient.respond(to: "second", with: .success([]))
         await viewModel.searchTask?.value
     }
 
@@ -179,19 +151,19 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "old"
         viewModel.search()
         let oldTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "old")
+        await apiClient.waitForRequest(keyword: "old")
 
         viewModel.query = "new"
         viewModel.search()
-        await service.waitForRequest(keyword: "new")
+        await apiClient.waitForRequest(keyword: "new")
 
-        await service.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
+        await apiClient.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
         await viewModel.searchTask?.value
-        await service.respond(to: "old", with: .success([.fixture(fullName: "old/result")]))
+        await apiClient.respond(to: "old", with: .success([.fixture(fullName: "old/result")]))
         await oldTask?.value
 
         #expect(viewModel.repositories.map(\.fullName) == ["new/result"])
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .loaded)
     }
 
     @Test("古い検索の失敗が後から返っても、新しい検索のエラー状態にしない")
@@ -200,17 +172,17 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "old"
         viewModel.search()
         let oldTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "old")
+        await apiClient.waitForRequest(keyword: "old")
 
         viewModel.query = "new"
         viewModel.search()
-        await service.waitForRequest(keyword: "new")
-        await service.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
+        await apiClient.waitForRequest(keyword: "new")
+        await apiClient.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
         await viewModel.searchTask?.value
-        await service.respond(to: "old", with: .failure(.network(.timedOut)))
+        await apiClient.respond(to: "old", with: .failure(.network(.timedOut)))
         await oldTask?.value
 
-        #expect(viewModel.searchError == nil)
+        #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["new/result"])
     }
 
@@ -219,24 +191,47 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
         let inFlightTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "second")
+        await apiClient.waitForRequest(keyword: "second")
 
         viewModel.query = ""
 
         #expect(viewModel.repositories.isEmpty)
-        #expect(!viewModel.isSearching)
+        #expect(viewModel.phase == .idle)
 
-        await service.respond(to: "second", with: .success([.fixture(fullName: "b/second")]))
+        await apiClient.respond(to: "second", with: .success([.fixture(fullName: "b/second")]))
         await inFlightTask?.value
 
         #expect(viewModel.repositories.isEmpty)
+    }
+
+    @Test(
+        "失敗の原因に応じた文言を返す",
+        arguments: [
+            (APIError.network(.notConnectedToInternet), "インターネットに接続されていません。接続を確認してから再度お試しください。"),
+            (APIError.network(.networkConnectionLost), "インターネットに接続されていません。接続を確認してから再度お試しください。"),
+            (APIError.network(.timedOut), "通信がタイムアウトしました。通信環境の良い場所で再度お試しください。"),
+            (APIError.network(.cannotFindHost), "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(403), "検索できる回数の上限に達しました。しばらく時間をおいて再度お試しください。"),
+            (APIError.httpStatus(429), "検索できる回数の上限に達しました。しばらく時間をおいて再度お試しください。"),
+            (APIError.httpStatus(422), "検索できないキーワードです。キーワードを見直してください。"),
+            (APIError.httpStatus(500), "GitHub で問題が発生しています。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(503), "GitHub で問題が発生しています。時間をおいて再度お試しください。"),
+            (APIError.httpStatus(404), "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.decoding(description: "broken"), "予期しない応答を受け取りました。時間をおいて再度お試しください。"),
+            (APIError.invalidResponse, "予期しない応答を受け取りました。時間をおいて再度お試しください。"),
+            (APIError.invalidRequest, "検索に失敗しました。時間をおいて再度お試しください。"),
+            (APIError.unexpected(description: "unknown"), "検索に失敗しました。時間をおいて再度お試しください。"),
+        ]
+    )
+    func failureMessageDependsOnError(error: APIError, expectedMessage: String) {
+        #expect(RepositorySearchViewModel.failureMessage(for: error) == expectedMessage)
     }
 
     // MARK: - ブックマーク
@@ -245,46 +240,43 @@ struct RepositorySearchViewModelTests {
     func initDoesNotReadStorage() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
 
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
     }
 
     @Test("loadBookmarks で保存済みのブックマークを読み込み、登録済みかどうかを返す")
     func loadsBookmarkedState() throws {
-        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one", isMarked: false)])
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
 
         let viewModel = makeViewModel()
 
-        // Search タブから見た登録状態は isMarked ではなく、保存済みの一覧に含まれているかで決まる
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "b/two")))
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+        #expect(!viewModel.isBookmarked(fullName: "b/two"))
     }
 
     @Test("追加すると、登録済みとして末尾に追加して保存する")
-    func addBookmarkAppendsAndSaves() async throws {
+    func addBookmarkAppendsAndSaves() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
         let viewModel = makeViewModel()
-        let repository = Repository.fixture(fullName: "b/two")
-        await search(viewModel, returning: [repository])
+        let repository = RepositoryDetail.fixture(fullName: "b/two")
 
-        viewModel.setBookmarked(repository, isBookmarked: true)
+        viewModel.addBookmark(repository)
 
         #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        #expect(viewModel.isBookmarked(repository))
+        #expect(viewModel.isBookmarked(fullName: repository.fullName))
     }
 
     @Test("削除すると、保存済みの一覧から削除して保存する")
-    func removeBookmarkRemovesAndSaves() async throws {
+    func removeBookmarkRemovesAndSaves() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
         let viewModel = makeViewModel()
-        let repository = Repository.fixture(fullName: "a/one")
-        await search(viewModel, returning: [repository])
+        let repository = RepositoryDetail.fixture(fullName: "a/one")
 
-        viewModel.setBookmarked(repository, isBookmarked: false)
+        viewModel.removeBookmark(fullName: repository.fullName)
 
         #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "b/two")])
-        #expect(!viewModel.isBookmarked(repository))
+        #expect(!viewModel.isBookmarked(fullName: repository.fullName))
     }
 
     @Test("登録状態が変わらない操作では保存しない")
@@ -293,56 +285,112 @@ struct RepositorySearchViewModelTests {
         let saveCountBefore = bookmarkStorage.saveCallCount
         let viewModel = makeViewModel()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
-        viewModel.setBookmarked(.fixture(fullName: "b/two"), isBookmarked: false)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+        viewModel.removeBookmark(fullName: "b/two")
 
         #expect(bookmarkStorage.saveCallCount == saveCountBefore)
     }
 
-    @Test("スター数などが変わっていても fullName が同じなら同じリポジトリとして扱う")
+    @Test("保存したときとスター数などが変わっていても、fullName が同じなら同じリポジトリとして扱う")
     func identifiesBookmarkByFullName() throws {
-        try bookmarkStorage.saveBookmarks([Bookmark(repository: .fixture(fullName: "apple/swift", stargazersCount: 1), isMarked: true)])
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "apple/swift", stargazersCount: 1)])
         let viewModel = makeViewModel()
-        let latestSearchResult = Repository.fixture(fullName: "apple/swift", stargazersCount: 999)
+        let latestSearchResult = RepositoryDetail.fixture(fullName: "apple/swift", stargazersCount: 999)
 
-        #expect(viewModel.isBookmarked(latestSearchResult))
+        #expect(viewModel.isBookmarked(fullName: latestSearchResult.fullName))
 
-        viewModel.setBookmarked(latestSearchResult, isBookmarked: false)
+        viewModel.removeBookmark(fullName: latestSearchResult.fullName)
 
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
     }
 
-    @Test("検索結果に含まれるブックマークは isMarked を true に戻して保存する")
-    func searchResultsRemarkBookmarks() async throws {
-        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one", isMarked: false), .fixture(fullName: "b/two", isMarked: false)])
+    @Test("読み込んだ後に Bookmark タブで追加されたリポジトリを追加しても、重複して保存せず登録済みにする")
+    func addDoesNotDuplicateBookmarkAddedFromBookmarkTab() throws {
         let viewModel = makeViewModel()
-
-        await search(viewModel, returning: [.fixture(fullName: "a/one"), .fixture(fullName: "c/three")])
-
-        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two", isMarked: false)])
-    }
-
-    @Test("検索結果で isMarked が変わらない場合は保存しない")
-    func searchResultsWithoutChangeDoNotSave() async throws {
+        // 詳細画面を開いている間に、Bookmark タブで再登録されたことを想定して保存先を直接書き換える
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
         let saveCountBefore = bookmarkStorage.saveCallCount
-        let viewModel = makeViewModel()
 
-        await search(viewModel, returning: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one")])
         #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
     }
 
-    @Test("保存に失敗しても登録状態は変更後のまま残し、失敗を bookmarkStorageError として公開する")
-    func keepsBookmarkedStateWhenSaveFails() {
+    @Test("読み込んだ後に Bookmark タブで削除されたリポジトリを削除しても保存せず、未登録にする")
+    func removeOfBookmarkRemovedFromBookmarkTabOnlyRefreshesState() throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+        let viewModel = makeViewModel()
+        try bookmarkStorage.saveBookmarks([])
+        let saveCountBefore = bookmarkStorage.saveCallCount
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
+    }
+
+    @Test("追加・削除すると、Bookmark タブでの変更も含めて登録状態を保存先に合わせる")
+    func operationRefreshesStateFromStorage() throws {
+        let viewModel = makeViewModel()
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+
+        viewModel.addBookmark(.fixture(fullName: "b/two"))
+
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+        #expect(viewModel.isBookmarked(fullName: "b/two"))
+    }
+
+    @Test("追加の保存に失敗した場合は登録状態を変えず、失敗を bookmarkStorageError として公開する")
+    func addKeepsStateWhenSaveFails() {
         bookmarkStorage.saveError = .saveFailed(description: "disk full")
         let viewModel = makeViewModel()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
         #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("削除の保存に失敗した場合は登録状態を変えず、失敗を公開する")
+    func removeKeepsStateWhenSaveFails() throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+        let viewModel = makeViewModel()
+        bookmarkStorage.saveError = .saveFailed(description: "disk full")
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one")])
+        #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("操作時に保存済みのデータを読み込めない場合は、登録状態を変えず保存もしない")
+    func addBookmarkKeepsStateWhenLoadFails() {
+        let viewModel = makeViewModel()
+        bookmarkStorage.loadError = .loadFailed(description: "broken")
+        let saveCountBefore = bookmarkStorage.saveCallCount
+
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
+        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
+    }
+
+    @Test("保存に失敗した後に画面へ戻って読み込み直しても、登録状態が変わらない")
+    func stateIsConsistentAfterReloadFollowingSaveFailure() {
+        bookmarkStorage.saveError = .saveFailed(description: "disk full")
+        let viewModel = makeViewModel()
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+        let stateBeforeReload = viewModel.isBookmarked(fullName: "a/one")
+
+        viewModel.loadBookmarks()
+
+        #expect(viewModel.isBookmarked(fullName: "a/one") == stateBeforeReload)
     }
 
     @Test("保存済みのブックマークを読み込めない場合は未登録として扱い、失敗を公開する")
@@ -351,7 +399,34 @@ struct RepositorySearchViewModelTests {
 
         let viewModel = makeViewModel()
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
+    }
+
+    @Test("ブックマークの失敗の表示を閉じると bookmarkStorageError がクリアされる")
+    func dismissingBookmarkStorageErrorClearsIt() {
+        bookmarkStorage.loadError = .loadFailed(description: "broken")
+        let viewModel = makeViewModel()
+        #expect(viewModel.isShowingBookmarkStorageError)
+
+        viewModel.isShowingBookmarkStorageError = false
+
+        #expect(viewModel.bookmarkStorageError == nil)
+    }
+}
+
+/// 検索のリクエストを、キーワードで待機・応答できるようにする
+private extension StubAPIClient {
+    func waitForRequest(keyword: String) async {
+        await waitForRequest(RepositorySearchRequest(keyword: keyword))
+    }
+
+    func respond(to keyword: String, with result: Result<[Repository], APIError>) {
+        respond(to: RepositorySearchRequest(keyword: keyword), with: result.map(RepositorySearchResponse.init(items:)))
+    }
+
+    var requestedKeywords: [String] {
+        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: ""))
+        return requestedKeys.filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
     }
 }

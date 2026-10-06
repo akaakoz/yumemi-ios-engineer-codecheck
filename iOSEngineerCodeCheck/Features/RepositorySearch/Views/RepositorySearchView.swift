@@ -18,7 +18,9 @@ struct RepositorySearchView: View {
     }
 
     var body: some View {
-        RepositoryListView(repositories: viewModel.repositories)
+        RepositoryListView(items: viewModel.repositories)
+            // 検索中は前回の画面を操作できないようにする
+            .disabled(viewModel.phase == .loading)
             .safeAreaInset(edge: .top) {
                 searchHeader
             }
@@ -29,26 +31,33 @@ struct RepositorySearchView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(
-                    repository: repository,
-                    isShownAsBookmarked: viewModel.isBookmarked(repository)
-                ) { isBookmarked in
-                    viewModel.setBookmarked(repository, isBookmarked: isBookmarked)
-                }
+                    source: .remote(fullName: repository.fullName),
+                    isBookmarked: { viewModel.isBookmarked(fullName: repository.fullName) },
+                    addBookmark: { viewModel.addBookmark($0) },
+                    removeBookmark: { viewModel.removeBookmark(fullName: repository.fullName) }
+                )
             }
             .onAppear {
                 viewModel.loadBookmarks()
             }
+            .alert(
+                "ブックマーク",
+                isPresented: $viewModel.isShowingBookmarkStorageError,
+                presenting: viewModel.bookmarkStorageError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error.message)
+            }
             .onChange(of: isSelected) { _, isSelected in
-                if isSelected {
-                    viewModel.dismissInitialGuide()
-                } else {
+                if !isSelected {
                     isSearchFieldFocused = false
                 }
             }
     }
 
     private var searchHeader: some View {
-        TextField("", text: searchFieldText)
+        TextField("", text: $viewModel.query, prompt: Text("リポジトリを検索"))
             .textFieldStyle(.roundedBorder)
             .submitLabel(.search)
             .focused($isSearchFieldFocused)
@@ -61,25 +70,24 @@ struct RepositorySearchView: View {
             .background(.bar)
     }
 
-    /// `isShowingInitialGuide` は必ず body の評価中に読むこと。`Binding` のクロージャ内だけで読むと変更が監視されず、
-    /// タブ切り替えで案内文を消しても検索欄が更新されない。
-    private var searchFieldText: Binding<String> {
-        guard viewModel.isShowingInitialGuide else {
-            return $viewModel.query
-        }
-        return Binding(
-            get: { "GitHubのリポジトリを検索できるよー" },
-            set: { viewModel.updateQuery($0) }
-        )
-    }
-
     @ViewBuilder
     private var statusOverlay: some View {
-        if viewModel.isSearching {
+        switch viewModel.phase {
+        case .loading:
             ProgressView()
-        } else if viewModel.repositories.isEmpty {
+        case .idle where viewModel.repositories.isEmpty:
             Text("GitHubのリポジトリを検索できるよー")
                 .foregroundStyle(.secondary)
+        case .loaded where viewModel.repositories.isEmpty:
+            Text("該当するリポジトリがありません")
+                .foregroundStyle(.secondary)
+        case .failed(let error):
+            Text(RepositorySearchViewModel.failureMessage(for: error))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+        case .idle, .loaded:
+            EmptyView()
         }
     }
 }

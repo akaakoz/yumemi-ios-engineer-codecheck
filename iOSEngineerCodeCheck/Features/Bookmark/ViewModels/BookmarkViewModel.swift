@@ -7,15 +7,24 @@ import Foundation
 import Observation
 import os
 
-/// Search タブとはインスタンスを共有せず、保存先を通して同期する。
-/// `isMarked` の変更は保存しないため、読み込み直したときもすでに一覧にある項目はメモリ上の値を残す。
+/// Search タブとはインスタンスを共有せず、保存先を通して同期する。表示されるたびに `loadBookmarks()` で読み込み直す。
 @MainActor
 @Observable
 final class BookmarkViewModel {
 
-    private(set) var bookmarks: [Bookmark] = []
-    /// 画面には表示しない。原因調査とテストのために保持する。
+    /// 追加した順に並ぶブックマーク
+    private(set) var bookmarks: [RepositoryDetail] = []
+    /// 直近の読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
     private(set) var storageError: BookmarkStorageError?
+
+    var isShowingStorageError: Bool {
+        get { storageError != nil }
+        set {
+            if !newValue {
+                storageError = nil
+            }
+        }
+    }
 
     private let storage: BookmarkStorageProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "Bookmark")
@@ -25,35 +34,68 @@ final class BookmarkViewModel {
     }
 
     func loadBookmarks() {
-        let storedBookmarks: [Bookmark]
         do {
-            storedBookmarks = try storage.loadBookmarks()
+            bookmarks = try storage.loadBookmarks()
             storageError = nil
         } catch {
             logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
             storageError = error
             bookmarks = []
-            return
-        }
-
-        let markedStates = Dictionary(bookmarks.map { ($0.id, $0.isMarked) }, uniquingKeysWith: { first, _ in first })
-        bookmarks = storedBookmarks.map { stored in
-            var bookmark = stored
-            if let isMarked = markedStates[stored.id] {
-                bookmark.isMarked = isMarked
-            }
-            return bookmark
         }
     }
 
-    func isMarked(_ repository: Repository) -> Bool {
-        bookmarks.first { $0.id == repository.id }?.isMarked == true
+    func isBookmarked(fullName: String) -> Bool {
+        bookmarks.contains { $0.fullName == fullName }
     }
 
-    func setMarked(_ repository: Repository, isMarked: Bool) {
-        guard let index = bookmarks.firstIndex(where: { $0.id == repository.id }) else {
+    /// 削除した後に詳細画面で追加し直すと、取得した `RepositoryDetail` で末尾に再登録される。
+    func addBookmark(_ repositoryDetail: RepositoryDetail) {
+        guard let storedBookmarks = readStoredBookmarks() else {
             return
         }
-        bookmarks[index].isMarked = isMarked
+        guard !storedBookmarks.contains(where: { $0.fullName == repositoryDetail.fullName }) else {
+            // Search タブで追加済みの場合は、保存し直さずに一覧だけ保存先に合わせる
+            bookmarks = storedBookmarks
+            return
+        }
+        save(storedBookmarks + [repositoryDetail])
+    }
+
+    /// 一覧から消えて保存される。詳細画面は値で遷移しているため、表示されたまま残る。
+    func removeBookmark(fullName: String) {
+        guard let storedBookmarks = readStoredBookmarks() else {
+            return
+        }
+        guard storedBookmarks.contains(where: { $0.fullName == fullName }) else {
+            // Search タブで削除済みの場合は、保存し直さずに一覧だけ保存先に合わせる
+            bookmarks = storedBookmarks
+            return
+        }
+        save(storedBookmarks.filter { $0.fullName != fullName })
+    }
+
+    /// 一覧は詳細画面を開いている間は読み込み直されず、その間に Search タブで追加・削除されていることがある。
+    /// 古い一覧で上書きしてその変更を消さないよう、追加・削除の直前に保存先から読み直す。
+    /// - Returns: 読み込めなかった場合は `nil`（失敗は `storageError` とログに残す）
+    private func readStoredBookmarks() -> [RepositoryDetail]? {
+        do {
+            return try storage.loadBookmarks()
+        } catch {
+            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
+            storageError = error
+            return nil
+        }
+    }
+
+    /// 保存に成功したときだけ一覧を差し替え、保存先の内容と食い違わないようにする。
+    private func save(_ updatedBookmarks: [RepositoryDetail]) {
+        do {
+            try storage.saveBookmarks(updatedBookmarks)
+            bookmarks = updatedBookmarks
+            storageError = nil
+        } catch {
+            logger.error("Failed to save bookmarks: \(String(describing: error), privacy: .public)")
+            storageError = error
+        }
     }
 }
