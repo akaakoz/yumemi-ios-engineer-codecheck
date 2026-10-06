@@ -1,0 +1,51 @@
+# 手元と同じ scripts/harness.sh で、lint・ビルド・ユニットテスト・UI テストを実行する。
+# 失敗した場合は、原因を調べるためのログと .xcresult を成果物（Artifacts）として保存する。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同じブランチ・PR で新しい実行が始まったら、古い実行は結果を待たずに止める
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # プロジェクトの開発環境（docs/DEVELOPMENT.md）に合わせた Xcode のメジャーバージョン
+      XCODE_MAJOR_VERSION: "26"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          # ランナーにある Xcode のうち、指定したメジャーバージョンの最新を使う
+          xcode_app="$(ls -d /Applications/Xcode_${XCODE_MAJOR_VERSION}*.app 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$xcode_app" ]; then
+            echo "::error::Xcode ${XCODE_MAJOR_VERSION} 系がランナーにありません。インストール済みの Xcode:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "$xcode_app"
+          xcodebuild -version
+
+      - name: Run harness (lint, build, unit tests, UI tests)
+        run: ./scripts/harness.sh all
+
+      - name: Upload logs and results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-results
+          path: build/harness/
+          retention-days: 7
+          if-no-files-found: ignore
