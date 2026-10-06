@@ -23,6 +23,20 @@ final class RepositorySearchViewModel {
         case failed(APIError)
     }
 
+    /// 2 ページ目以降の追加読み込みの状態。最初の検索の状態（`phase`）とは分けて持ち、失敗してもそれまでの結果は残す。
+    enum LoadMorePhase: Equatable {
+        case idle
+        case loading
+        /// 自動では読み込み直さず、`retryLoadMore()` を待つ
+        case failed(APIError)
+    }
+
+    /// 次に読み込むページ。追加読み込みは、表示中の結果と同じキーワードで行う
+    private struct NextPage {
+        let keyword: String
+        let page: Int
+    }
+
     var query = "" {
         didSet {
             if query.isEmpty {
@@ -31,7 +45,9 @@ final class RepositorySearchViewModel {
         }
     }
     private(set) var phase = Phase.idle
-    /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
+    private(set) var loadMorePhase = LoadMorePhase.idle
+    /// 直近に成功した検索の結果（読み込んだページを順に連結し、同じリポジトリは 1 件にまとめたもの）。
+    /// 新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
     private(set) var repositories: [Repository] = []
     /// 直近のブックマークの読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
     private(set) var bookmarkStorageError: BookmarkStorageError?
@@ -47,6 +63,10 @@ final class RepositorySearchViewModel {
 
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
+    /// 実行中の追加読み込み。新しい検索を始めるときにキャンセルし、前の検索の続きを新しい結果に混ぜない。
+    @ObservationIgnored private(set) var loadMoreTask: Task<Void, Never>?
+    /// 次のページが無い場合（最後まで読み込んだ、またはまだ検索に成功していない）は `nil`
+    @ObservationIgnored private var nextPage: NextPage?
     /// 表示用のブックマーク済みのリポジトリ。
     private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
@@ -68,15 +88,16 @@ final class RepositorySearchViewModel {
             return
         }
 
-        searchTask?.cancel()
+        cancelLoading()
         phase = .loading
 
         searchTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: keyword, page: 1).repositories
+                let result = try await apiService.searchRepositories(keyword: keyword, page: 1)
                 // キャンセル済み = より新しい検索が始まっている、またはクリアされたので結果を反映しない
                 guard !Task.isCancelled else { return }
-                repositories = result
+                repositories = Self.removingDuplicates(result.repositories)
+                nextPage = result.hasNextPage ? NextPage(keyword: keyword, page: 2) : nil
                 phase = .loaded
             } catch {
                 guard !Task.isCancelled else { return }
@@ -86,6 +107,23 @@ final class RepositorySearchViewModel {
                 phase = .failed(error)
             }
         }
+    }
+
+    /// 一覧の最後まで表示されたときに呼ぶ。次のページがあれば、同じ検索条件で読み込んで結果の末尾に足す。
+    /// 最初の検索の通信中・追加読み込みの通信中・追加読み込みの失敗後（`retryLoadMore()` を待つ）は何もしない。
+    func loadMoreIfNeeded() {
+        guard phase == .loaded, loadMorePhase == .idle, let nextPage else {
+            return
+        }
+        loadMore(nextPage)
+    }
+
+    /// 追加読み込みに失敗したページを、もう一度読み込む。
+    func retryLoadMore() {
+        guard phase == .loaded, case .failed = loadMorePhase, let nextPage else {
+            return
+        }
+        loadMore(nextPage)
     }
 
     /// 検索に失敗したときに画面に表示する文言。原因に応じて、利用者が取れる対応が分かるようにする。
@@ -156,11 +194,51 @@ final class RepositorySearchViewModel {
 
     // MARK: - Private
 
-    private func clearResults() {
+    private func loadMore(_ page: NextPage) {
+        loadMorePhase = .loading
+        loadMoreTask = Task {
+            do throws(APIError) {
+                let result = try await apiService.searchRepositories(keyword: page.keyword, page: page.page)
+                // キャンセル済み = 新しい検索が始まっている、またはクリアされたので、前の検索の続きを反映しない
+                guard !Task.isCancelled else { return }
+                let existingIDs = Set(repositories.map(\.id))
+                // 検索結果の順位は読み込みの間にも変わるため、前のページで表示したリポジトリが再び含まれることがある
+                let newRepositories = Self.removingDuplicates(result.repositories).filter { !existingIDs.contains($0.id) }
+                repositories += newRepositories
+                nextPage = result.hasNextPage ? NextPage(keyword: page.keyword, page: page.page + 1) : nil
+                loadMorePhase = .idle
+                // すべて表示済みだった場合は一覧の最後の行が変わらず、次の読み込みのきっかけが無いため、続けて読み込む
+                if newRepositories.isEmpty {
+                    loadMoreIfNeeded()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                logger.error("Loading more search results failed: \(String(describing: error), privacy: .public)")
+                loadMorePhase = .failed(error)
+            }
+        }
+    }
+
+    /// 実行中の検索と追加読み込みをキャンセルし、追加読み込みの状態を初期化する
+    private func cancelLoading() {
         searchTask?.cancel()
         searchTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+        nextPage = nil
+        loadMorePhase = .idle
+    }
+
+    private func clearResults() {
+        cancelLoading()
         repositories = []
         phase = .idle
+    }
+
+    /// 同じリポジトリ（`id` が同じもの）は最初の 1 件だけを残す
+    private static func removingDuplicates(_ repositories: [Repository]) -> [Repository] {
+        var seenIDs = Set<Repository.ID>()
+        return repositories.filter { seenIDs.insert($0.id).inserted }
     }
 
     /// - Returns: 読み込めなかった場合は `nil`（失敗は `bookmarkStorageError` とログに残す）

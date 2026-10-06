@@ -234,6 +234,239 @@ struct RepositorySearchViewModelTests {
         #expect(RepositorySearchViewModel.failureMessage(for: error) == expectedMessage)
     }
 
+    // MARK: - 追加読み込み
+
+    /// 1 ページ目に `firstPage`（全 `totalCount` 件）を表示している状態の ViewModel
+    private func makeViewModelShowingFirstPage(
+        keyword: String = "swift",
+        _ firstPage: [Repository],
+        totalCount: Int = 100
+    ) async -> RepositorySearchViewModel {
+        let viewModel = makeViewModel()
+        viewModel.query = keyword
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: keyword)
+        await apiClient.respond(to: keyword, totalCount: totalCount, with: .success(firstPage))
+        await viewModel.searchTask?.value
+        return viewModel
+    }
+
+    @Test("最後まで表示されたら次のページを同じキーワードで読み込み、通信中は loading、成功すると末尾に足す")
+    func loadMoreAppendsNextPage() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+
+        #expect(viewModel.loadMorePhase == .loading)
+        #expect(viewModel.phase == .loaded)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
+
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.loadMorePhase == .idle)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "b/two"])
+    }
+
+    @Test("次のページが無い場合は読み込まない")
+    func loadMoreDoesNothingWithoutNextPage() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")], totalCount: 1)
+
+        viewModel.loadMoreIfNeeded()
+
+        #expect(viewModel.loadMorePhase == .idle)
+        #expect(viewModel.loadMoreTask == nil)
+    }
+
+    @Test("最後のページまで読み込んだら、それ以上は読み込まない")
+    func loadMoreStopsAfterLastPage() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")], totalCount: 31)
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(to: "swift", page: 2, totalCount: 31, with: .success([.fixture(fullName: "b/two")]))
+        await viewModel.loadMoreTask?.value
+        let requestCount = await apiClient.requestedKeys.count
+
+        viewModel.loadMoreIfNeeded()
+
+        #expect(await apiClient.requestedKeys.count == requestCount)
+        #expect(viewModel.loadMorePhase == .idle)
+    }
+
+    @Test("追加読み込みの通信中に呼ばれても、同じページを重ねて要求しない")
+    func loadMoreDoesNotRequestTwiceWhileLoading() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+
+        viewModel.loadMoreIfNeeded()
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(await apiClient.requestedKeywords == ["swift", "swift"])
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "b/two"])
+    }
+
+    @Test("前のページで表示したリポジトリが次のページに含まれていても、重複して表示しない")
+    func loadMoreRemovesDuplicates() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(
+            to: "swift",
+            page: 2,
+            totalCount: 100,
+            with: .success([.fixture(fullName: "b/two", stargazersCount: 999), .fixture(fullName: "c/three"), .fixture(fullName: "c/three")])
+        )
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "b/two", "c/three"])
+        // 先に表示していた内容を残す
+        #expect(viewModel.repositories[1].stargazersCount == 100)
+    }
+
+    @Test("次のページがすべて表示済みのリポジトリだった場合は、続けて次のページを読み込む")
+    func loadMoreContinuesWhenPageHasNoNewRepositories() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "a/one")]))
+        await viewModel.loadMoreTask?.value
+
+        await apiClient.waitForRequest(keyword: "swift", page: 3)
+        #expect(viewModel.loadMorePhase == .loading)
+        await apiClient.respond(to: "swift", page: 3, totalCount: 100, with: .success([.fixture(fullName: "c/three")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "c/three"])
+    }
+
+    @Test("追加読み込みに失敗してもそれまでの結果は残し、自動では読み込み直さず、再試行で同じページを読み込める")
+    func loadMoreFailureKeepsResultsAndCanRetry() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(to: "swift", page: 2, with: .failure(.network(.notConnectedToInternet)))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.loadMorePhase == .failed(.network(.notConnectedToInternet)))
+        #expect(viewModel.phase == .loaded)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
+
+        // 失敗中は、最後まで表示されても自動では読み込み直さない
+        viewModel.loadMoreIfNeeded()
+        #expect(await apiClient.requestedKeywords.count == 2)
+
+        viewModel.retryLoadMore()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        #expect(viewModel.loadMorePhase == .loading)
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.loadMorePhase == .idle)
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "b/two"])
+    }
+
+    @Test("失敗していないときに再試行しても、何もしない")
+    func retryDoesNothingUnlessFailed() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+
+        viewModel.retryLoadMore()
+
+        #expect(viewModel.loadMoreTask == nil)
+        #expect(viewModel.loadMorePhase == .idle)
+    }
+
+    @Test("新しい検索の通信中は、前の検索の続きを読み込まない")
+    func loadMoreDoesNothingWhileNewSearchIsLoading() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.query = "kotlin"
+        viewModel.search()
+
+        viewModel.loadMoreIfNeeded()
+
+        #expect(viewModel.loadMoreTask == nil)
+        #expect(viewModel.loadMorePhase == .idle)
+    }
+
+    @Test("追加読み込みの通信中に新しい検索を始めると、前の検索の続きが後から返っても新しい結果に混ぜない")
+    func newSearchDiscardsInFlightLoadMore() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        let oldLoadMoreTask = viewModel.loadMoreTask
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+
+        viewModel.query = "kotlin"
+        viewModel.search()
+        #expect(viewModel.loadMorePhase == .idle)
+        await apiClient.waitForRequest(keyword: "kotlin")
+        await apiClient.respond(to: "kotlin", totalCount: 100, with: .success([.fixture(fullName: "k/one")]))
+        await viewModel.searchTask?.value
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await oldLoadMoreTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["k/one"])
+        #expect(viewModel.loadMorePhase == .idle)
+
+        // 新しい検索の続きは、新しいキーワードで 2 ページ目から読み込む
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "kotlin", page: 2)
+        await apiClient.respond(to: "kotlin", page: 2, totalCount: 100, with: .success([.fixture(fullName: "k/two")]))
+        await viewModel.loadMoreTask?.value
+        #expect(viewModel.repositories.map(\.fullName) == ["k/one", "k/two"])
+    }
+
+    @Test("追加読み込みの失敗の後に新しい検索を始めると、失敗の状態を残さない")
+    func newSearchClearsLoadMoreFailure() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(to: "swift", page: 2, with: .failure(.httpStatus(500)))
+        await viewModel.loadMoreTask?.value
+
+        viewModel.query = "kotlin"
+        viewModel.search()
+
+        #expect(viewModel.loadMorePhase == .idle)
+        #expect(viewModel.phase == .loading)
+    }
+
+    @Test("追加読み込みの通信中に入力を空にすると、結果をクリアし、後から返った続きも反映しない")
+    func clearingQueryDiscardsInFlightLoadMore() async {
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        let inFlightTask = viewModel.loadMoreTask
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+
+        viewModel.query = ""
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await inFlightTask?.value
+
+        #expect(viewModel.repositories.isEmpty)
+        #expect(viewModel.phase == .idle)
+        #expect(viewModel.loadMorePhase == .idle)
+    }
+
+    @Test("追加読み込みで表示したリポジトリも、ブックマークの登録状態を正しく扱える")
+    func bookmarkStateIsConsistentForLoadedMoreRepositories() async throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "b/two")])
+        let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", page: 2)
+        await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two"), .fixture(fullName: "c/three")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.isBookmarked(fullName: "b/two"))
+        #expect(!viewModel.isBookmarked(fullName: "c/three"))
+
+        viewModel.addBookmark(.fixture(fullName: "c/three"))
+
+        #expect(viewModel.isBookmarked(fullName: "c/three"))
+        #expect(bookmarkStorage.savedBookmarks.map(\.fullName) == ["b/two", "c/three"])
+    }
+
     // MARK: - ブックマーク
 
     @Test("生成しただけでは保存先を読み込まない")
