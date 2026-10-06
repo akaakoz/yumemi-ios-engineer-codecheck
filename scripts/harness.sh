@@ -32,10 +32,9 @@ usage() {
     cat <<'EOF'
 使い方: scripts/harness.sh <コマンド>
 
-  check   変更後に毎回実行する: lint → build → unit
+  check   変更後に毎回実行する: build → unit
   all     check に加えて UI テストも実行する（CI で使う）
-  lint    プロジェクトのルールで禁止しているコードの書き方を検出する
-  build   アプリとテストをビルドする（警告もエラーとして扱う）
+  build   アプリとテストをビルドする（SwiftLint の検査を含む。警告もエラーとして扱う）
   unit    ユニットテストを実行する（build の後に実行する）
   ui      UI テストを実行する（build の後に実行する）
   help    この説明を表示する
@@ -190,83 +189,6 @@ json_value() {
     printf '%s' "$1" | plutil -extract "$2" raw -o - - 2>/dev/null
 }
 
-# プロジェクトのルールで禁止している書き方。「<正規表現（awk）>	<説明>」を1行に1つ書く。
-FORBIDDEN_PATTERNS='try[?]	try? でエラーを握りつぶさない。do-catch で扱う
-try!	try! は使わない。do-catch で扱う
-as!	as! は使わない。as? で扱う
-catch[^{]*[{][[:space:]]*[}]	空の catch でエラーを握りつぶさない
-@unchecked[[:space:]]+Sendable	@unchecked Sendable は使わない。Sendable を満たす型にする
-nonisolated[(]unsafe[)]	nonisolated(unsafe) は使わない
-Task[.]sleep	Task.sleep で待ち合わせない（テストでも使わない）。完了を待てる仕組みにする'
-
-# lint の対象にする Swift ファイルを、NUL 区切りで出力する。
-# git で管理しているファイルと、gitignore の対象外の未追加ファイルが対象。
-# git rm せずに削除したファイルは git の一覧に残るため、ディスク上に存在するものだけに絞る
-list_swift_files() {
-    local file
-    git ls-files -z --cached --others --exclude-standard '*.swift' |
-        while IFS= read -r -d '' file; do
-            if [ -f "$file" ]; then
-                printf '%s\0' "$file"
-            fi
-        done
-}
-
-# 対象の Swift ファイルから、禁止している書き方を検出する。
-# - コメント（// 以降）は対象外
-# - やむを得ず使う行には「// harness:allow <理由>」を書くと対象外になる
-step_lint() {
-    log "lint: 実行中"
-    local started_at=$SECONDS
-    local violations
-    violations="$(
-        cd "$ROOT_DIR" &&
-            list_swift_files |
-            HARNESS_FORBIDDEN_PATTERNS="$FORBIDDEN_PATTERNS" xargs -0 awk '
-                BEGIN {
-                    count = split(ENVIRON["HARNESS_FORBIDDEN_PATTERNS"], lines, "\n")
-                    for (i = 1; i <= count; i++) {
-                        split(lines[i], fields, "\t")
-                        regex[i] = fields[1]
-                        message[i] = fields[2]
-                    }
-                }
-                index($0, "harness:allow") > 0 { next }
-                {
-                    code = $0
-                    comment_start = index(code, "//")
-                    if (comment_start > 0) {
-                        code = substr(code, 1, comment_start - 1)
-                    }
-                    for (i = 1; i <= count; i++) {
-                        if (code ~ regex[i]) {
-                            printf "%s:%d: %s\n    %s\n", FILENAME, FNR, message[i], $0
-                        }
-                    }
-                }
-            '
-    )"
-    local status=$?
-    local elapsed=$((SECONDS - started_at))
-
-    # 検査そのものが失敗した場合（awk のエラーなど）は、検出なしと誤って判断しないよう失敗にする
-    if [ "$status" -ne 0 ]; then
-        log "lint: 失敗（${elapsed}秒、検査を実行できませんでした。終了コード ${status}）"
-        return 1
-    fi
-
-    if [ -z "$violations" ]; then
-        log "lint: 成功（${elapsed}秒）"
-        return 0
-    fi
-
-    log "lint: 失敗（${elapsed}秒）"
-    log "禁止している書き方が見つかりました（<ファイル>:<行>: <理由>）:"
-    printf '%s\n' "$violations"
-    log "やむを得ず使う場合は、その行に「// harness:allow <理由>」を書いてください"
-    return 1
-}
-
 step_build() {
     # 警告もエラーとして扱い、Swift 6 の並行処理の警告などを取りこぼさない。
     # project の設定は変えず、このスクリプトで実行するときだけ指定する。
@@ -306,9 +228,9 @@ run_steps() {
 main() {
     local command="${1:-check}"
     case "$command" in
-        check) run_steps lint build unit ;;
-        all) run_steps lint build unit ui ;;
-        lint | build | unit | ui) run_steps "$command" ;;
+        check) run_steps build unit ;;
+        all) run_steps build unit ui ;;
+        build | unit | ui) run_steps "$command" ;;
         help | -h | --help) usage ;;
         *)
             usage >&2
