@@ -87,13 +87,14 @@ struct RepositoryDetailView: View {
     }
 
     private func summaryView(_ detail: RepositoryDetail) -> some View {
-        HStack(alignment: .top) {
+        VStack(spacing: 16) {
             if let language = detail.language {
                 Text("Written in \(language)")
                     .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Spacer(minLength: 24)
 
             VStack(alignment: .trailing, spacing: 16) {
                 Text("\(detail.stargazersCount) stars")
@@ -102,6 +103,7 @@ struct RepositoryDetailView: View {
                 Text("\(detail.openIssuesCount) open issues")
             }
             .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
