@@ -254,12 +254,13 @@ struct RepositorySearchViewModelTests {
     @Test("最後まで表示されたら次のページを同じキーワードで読み込み、通信中は loading、成功すると末尾に足す")
     func loadMoreAppendsNextPage() async {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
-        #expect(viewModel.hasNextPage)
+        #expect(viewModel.canLoadMore)
 
         viewModel.loadMoreIfNeeded()
         await apiClient.waitForRequest(keyword: "swift", page: 2)
 
         #expect(viewModel.loadMorePhase == .loading)
+        #expect(!viewModel.canLoadMore)
         #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
 
@@ -273,7 +274,7 @@ struct RepositorySearchViewModelTests {
     @Test("次のページが無い場合は読み込まない")
     func loadMoreDoesNothingWithoutNextPage() async {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")], totalCount: 1)
-        #expect(!viewModel.hasNextPage)
+        #expect(!viewModel.canLoadMore)
 
         viewModel.loadMoreIfNeeded()
 
@@ -289,7 +290,7 @@ struct RepositorySearchViewModelTests {
         await apiClient.respond(to: "swift", page: 2, totalCount: 31, with: .success([.fixture(fullName: "b/two")]))
         await viewModel.loadMoreTask?.value
         let requestCount = await apiClient.requestedKeys.count
-        #expect(!viewModel.hasNextPage)
+        #expect(!viewModel.canLoadMore)
 
         viewModel.loadMoreIfNeeded()
 
@@ -340,7 +341,7 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
         #expect(viewModel.loadMorePhase == .idle)
-        #expect(viewModel.hasNextPage)
+        #expect(viewModel.canLoadMore)
 
         viewModel.loadMoreIfNeeded()
         await apiClient.waitForRequest(keyword: "swift", page: 3)
@@ -359,6 +360,7 @@ struct RepositorySearchViewModelTests {
         await viewModel.loadMoreTask?.value
 
         #expect(viewModel.loadMorePhase == .failed(.network(.notConnectedToInternet)))
+        #expect(!viewModel.canLoadMore)
         #expect(viewModel.phase == .loaded)
         #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
 
@@ -391,7 +393,7 @@ struct RepositorySearchViewModelTests {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
         viewModel.query = "kotlin"
         viewModel.search()
-        #expect(!viewModel.hasNextPage)
+        #expect(!viewModel.canLoadMore)
 
         viewModel.loadMoreIfNeeded()
 

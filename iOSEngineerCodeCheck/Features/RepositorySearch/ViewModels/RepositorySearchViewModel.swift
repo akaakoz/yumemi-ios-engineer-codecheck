@@ -68,9 +68,9 @@ final class RepositorySearchViewModel {
     /// 次のページが無い場合（最後まで読み込んだ、またはまだ検索に成功していない）は `nil`
     private var nextPage: NextPage?
 
-    /// 表示中の結果に続きのページがあるか
-    var hasNextPage: Bool {
-        nextPage != nil
+    /// 続きのページを今読み込める状態か。最初の検索に成功していて、追加読み込みの通信中・失敗中でなく、次のページがある
+    var canLoadMore: Bool {
+        phase == .loaded && loadMorePhase == .idle && nextPage != nil
     }
     /// 表示用のブックマーク済みのリポジトリ。
     private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
@@ -117,7 +117,7 @@ final class RepositorySearchViewModel {
     /// 一覧の一番下が表示されたときに呼ぶ。次のページがあれば、同じ検索条件で読み込んで結果の末尾に足す。
     /// 最初の検索の通信中・追加読み込みの通信中・追加読み込みの失敗後（`retryLoadMore()` を待つ）は何もしない。
     func loadMoreIfNeeded() {
-        guard phase == .loaded, loadMorePhase == .idle, let nextPage else {
+        guard canLoadMore, let nextPage else {
             return
         }
         loadMore(nextPage)

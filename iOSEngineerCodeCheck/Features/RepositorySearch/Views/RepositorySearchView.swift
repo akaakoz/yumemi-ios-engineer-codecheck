@@ -85,7 +85,7 @@ struct RepositorySearchView: View {
     @ViewBuilder
     private var loadMoreFooter: some View {
         switch viewModel.loadMorePhase {
-        case .idle where viewModel.phase == .loaded && viewModel.hasNextPage:
+        case .idle where viewModel.canLoadMore:
             loadMoreIndicator
                 .onAppear {
                     viewModel.loadMoreIfNeeded()
