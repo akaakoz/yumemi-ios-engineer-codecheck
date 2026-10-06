@@ -137,7 +137,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         let field = app.textFields["repositorySearch.field"]
         XCTAssertTrue(field.waitForExistence(timeout: timeout))
 
-        XCTAssertEqual(field.placeholderValue, "GitHubのリポジトリを検索できるよー")
+        XCTAssertEqual(field.placeholderValue, "リポジトリを検索")
 
         field.tap()
         field.typeText("swift")

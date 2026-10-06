@@ -57,7 +57,7 @@ struct RepositorySearchView: View {
     }
 
     private var searchHeader: some View {
-        TextField("", text: $viewModel.query, prompt: Text("GitHubのリポジトリを検索できるよー"))
+        TextField("", text: $viewModel.query, prompt: Text("リポジトリを検索"))
             .textFieldStyle(.roundedBorder)
             .submitLabel(.search)
             .focused($isSearchFieldFocused)
