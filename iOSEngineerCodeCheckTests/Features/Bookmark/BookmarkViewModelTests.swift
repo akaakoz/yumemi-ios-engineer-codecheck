@@ -105,6 +105,78 @@ struct BookmarkViewModelTests {
         #expect(storage.saveCallCount == 0)
     }
 
+    @Test("一覧を読み込んだ後に Search タブで追加されたブックマークは、削除しても残る")
+    func removeKeepsBookmarkAddedFromSearchTab() throws {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        // 詳細画面を開いている間に、Search タブで追加されたことを想定して保存先を直接書き換える
+        try storage.saveBookmarks([.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(storage.savedBookmarks == [.fixture(fullName: "b/two")])
+        #expect(viewModel.bookmarks == [.fixture(fullName: "b/two")])
+    }
+
+    @Test("一覧を読み込んだ後に Search タブで追加されたブックマークは、再登録しても残る")
+    func reAddKeepsBookmarkAddedFromSearchTab() throws {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        viewModel.removeBookmark(fullName: "a/one")
+        try storage.saveBookmarks([.fixture(fullName: "b/two")])
+
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+
+        #expect(storage.savedBookmarks == [.fixture(fullName: "b/two"), .fixture(fullName: "a/one")])
+        #expect(viewModel.bookmarks == storage.savedBookmarks)
+    }
+
+    @Test("Search タブで追加済みのブックマークを再登録しても、重複して保存しない")
+    func reAddDoesNotDuplicateBookmarkAddedFromSearchTab() throws {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        viewModel.removeBookmark(fullName: "a/one")
+        try storage.saveBookmarks([.fixture(fullName: "a/one")])
+        let saveCountBeforeAdd = storage.saveCallCount
+
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+
+        #expect(storage.savedBookmarks == [.fixture(fullName: "a/one")])
+        #expect(storage.saveCallCount == saveCountBeforeAdd)
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+    }
+
+    @Test("Search タブで削除済みのブックマークを削除しても保存せず、一覧を保存先に合わせる")
+    func removeOfBookmarkRemovedFromSearchTabOnlyRefreshesList() throws {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        try storage.saveBookmarks([.fixture(fullName: "b/two")])
+        let saveCountBeforeRemove = storage.saveCallCount
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(storage.saveCallCount == saveCountBeforeRemove)
+        #expect(viewModel.bookmarks == [.fixture(fullName: "b/two")])
+    }
+
+    @Test("追加・削除の前に保存先を読み込めない場合は保存せず、失敗を storageError として公開する")
+    func operationDoesNotSaveWhenLoadFails() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        storage.loadError = .loadFailed(description: "broken")
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(storage.saveCallCount == 0)
+        #expect(viewModel.bookmarks == [.fixture(fullName: "a/one")])
+        #expect(viewModel.storageError == .loadFailed(description: "broken"))
+    }
+
     @Test("削除の保存に失敗した場合は一覧を変えず、失敗を storageError として公開する")
     func removeKeepsListWhenSaveFails() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])

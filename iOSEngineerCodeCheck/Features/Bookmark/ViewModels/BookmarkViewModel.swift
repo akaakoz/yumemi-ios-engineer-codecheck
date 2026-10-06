@@ -50,18 +50,41 @@ final class BookmarkViewModel {
 
     /// 削除した後に詳細画面で追加し直すと、取得した `RepositoryDetail` で末尾に再登録される。
     func addBookmark(_ repositoryDetail: RepositoryDetail) {
-        guard !isBookmarked(fullName: repositoryDetail.fullName) else {
+        guard let storedBookmarks = readStoredBookmarks() else {
             return
         }
-        save(bookmarks + [repositoryDetail])
+        guard !storedBookmarks.contains(where: { $0.fullName == repositoryDetail.fullName }) else {
+            // Search タブで追加済みの場合は、保存し直さずに一覧だけ保存先に合わせる
+            bookmarks = storedBookmarks
+            return
+        }
+        save(storedBookmarks + [repositoryDetail])
     }
 
     /// 一覧から消えて保存される。詳細画面は値で遷移しているため、表示されたまま残る。
     func removeBookmark(fullName: String) {
-        guard isBookmarked(fullName: fullName) else {
+        guard let storedBookmarks = readStoredBookmarks() else {
             return
         }
-        save(bookmarks.filter { $0.fullName != fullName })
+        guard storedBookmarks.contains(where: { $0.fullName == fullName }) else {
+            // Search タブで削除済みの場合は、保存し直さずに一覧だけ保存先に合わせる
+            bookmarks = storedBookmarks
+            return
+        }
+        save(storedBookmarks.filter { $0.fullName != fullName })
+    }
+
+    /// 一覧は詳細画面を開いている間は読み込み直されず、その間に Search タブで追加・削除されていることがある。
+    /// 古い一覧で上書きしてその変更を消さないよう、追加・削除の直前に保存先から読み直す。
+    /// - Returns: 読み込めなかった場合は `nil`（失敗は `storageError` とログに残す）
+    private func readStoredBookmarks() -> [RepositoryDetail]? {
+        do {
+            return try storage.loadBookmarks()
+        } catch {
+            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
+            storageError = error
+            return nil
+        }
     }
 
     /// 保存に成功したときだけ一覧を差し替え、保存先の内容と食い違わないようにする。
