@@ -28,10 +28,11 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # ランナーにある Xcode のうち、指定したメジャーバージョンの最新を使う
-          xcode_app="$(ls -d /Applications/Xcode_${XCODE_MAJOR_VERSION}*.app 2>/dev/null | sort -V | tail -n 1)"
+          # ランナーにある Xcode のうち、指定したメジャーバージョンの最新の安定版を使う。
+          # ベータ版・RC 版は、安定版にない警告でビルドが失敗し、手元と結果がずれるため除く
+          xcode_app="$(ls -d /Applications/Xcode_${XCODE_MAJOR_VERSION}*.app 2>/dev/null | grep -v -i -E 'beta|release_candidate' | sort -V | tail -n 1)"
           if [ -z "$xcode_app" ]; then
-            echo "::error::Xcode ${XCODE_MAJOR_VERSION} 系がランナーにありません。インストール済みの Xcode:"
+            echo "::error::Xcode ${XCODE_MAJOR_VERSION} 系の安定版がランナーにありません。インストール済みの Xcode:"
             ls -d /Applications/Xcode*.app
             exit 1
           fi
