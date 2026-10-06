@@ -304,6 +304,45 @@ struct RepositorySearchViewModelTests {
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
     }
 
+    @Test("読み込んだ後に Bookmark タブで追加されたリポジトリを追加しても、重複して保存せず登録済みにする")
+    func addDoesNotDuplicateBookmarkAddedFromBookmarkTab() throws {
+        let viewModel = makeViewModel()
+        // 詳細画面を開いている間に、Bookmark タブで再登録されたことを想定して保存先を直接書き換える
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+        let saveCountBefore = bookmarkStorage.saveCallCount
+
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one")])
+        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+    }
+
+    @Test("読み込んだ後に Bookmark タブで削除されたリポジトリを削除しても保存せず、未登録にする")
+    func removeOfBookmarkRemovedFromBookmarkTabOnlyRefreshesState() throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+        let viewModel = makeViewModel()
+        try bookmarkStorage.saveBookmarks([])
+        let saveCountBefore = bookmarkStorage.saveCallCount
+
+        viewModel.removeBookmark(fullName: "a/one")
+
+        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
+    }
+
+    @Test("追加・削除すると、Bookmark タブでの変更も含めて登録状態を保存先に合わせる")
+    func operationRefreshesStateFromStorage() throws {
+        let viewModel = makeViewModel()
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+
+        viewModel.addBookmark(.fixture(fullName: "b/two"))
+
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+        #expect(viewModel.isBookmarked(fullName: "b/two"))
+    }
+
     @Test("追加の保存に失敗した場合は登録状態を変えず、失敗を bookmarkStorageError として公開する")
     func addKeepsStateWhenSaveFails() {
         bookmarkStorage.saveError = .saveFailed(description: "disk full")

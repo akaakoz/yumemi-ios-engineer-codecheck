@@ -47,8 +47,7 @@ final class RepositorySearchViewModel {
 
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
-    /// ブックマーク済みのリポジトリ。ブックマークの登録・削除は Search タブからしか行えないため、
-    /// `loadBookmarks()` で読み込んだ後はこの ViewModel での変更に合わせて更新すれば保存内容と一致する。
+    /// 表示用のブックマーク済みのリポジトリ。
     private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
     private let apiService: RepositorySearchAPIServiceProtocol
@@ -124,31 +123,35 @@ final class RepositorySearchViewModel {
 
     /// 詳細画面で取得した `RepositoryDetail` をブックマークに追加する。
     func addBookmark(_ repositoryDetail: RepositoryDetail) {
-        guard !isBookmarked(fullName: repositoryDetail.fullName) else {
+        guard let storedBookmarks = readStoredBookmarks() else {
             return
         }
-        guard var bookmarks = readStoredBookmarks() else {
+        guard !storedBookmarks.contains(where: { $0.fullName == repositoryDetail.fullName }) else {
+            // Bookmark タブで追加済みの場合は、重複して保存せずに登録状態だけ保存先に合わせる
+            bookmarkedRepositoryIDs = Set(storedBookmarks.map(\.id))
             return
         }
-        bookmarks.append(repositoryDetail)
-        guard saveBookmarks(bookmarks) else {
+        let updatedBookmarks = storedBookmarks + [repositoryDetail]
+        guard saveBookmarks(updatedBookmarks) else {
             return
         }
-        bookmarkedRepositoryIDs.insert(repositoryDetail.fullName)
+        bookmarkedRepositoryIDs = Set(updatedBookmarks.map(\.id))
     }
 
     func removeBookmark(fullName: String) {
-        guard isBookmarked(fullName: fullName) else {
+        guard let storedBookmarks = readStoredBookmarks() else {
             return
         }
-        guard var bookmarks = readStoredBookmarks() else {
+        guard storedBookmarks.contains(where: { $0.fullName == fullName }) else {
+            // Bookmark タブで削除済みの場合は、保存し直さずに登録状態だけ保存先に合わせる
+            bookmarkedRepositoryIDs = Set(storedBookmarks.map(\.id))
             return
         }
-        bookmarks.removeAll { $0.fullName == fullName }
-        guard saveBookmarks(bookmarks) else {
+        let updatedBookmarks = storedBookmarks.filter { $0.fullName != fullName }
+        guard saveBookmarks(updatedBookmarks) else {
             return
         }
-        bookmarkedRepositoryIDs.remove(fullName)
+        bookmarkedRepositoryIDs = Set(updatedBookmarks.map(\.id))
     }
 
     // MARK: - Private
