@@ -11,13 +11,13 @@ import Testing
 @Suite("RepositorySearchViewModel")
 struct RepositorySearchViewModelTests {
 
-    private let service = ControllableRepositorySearchService()
+    private let apiClient = StubAPIClient()
     /// 端末の UserDefaults を使わないよう、ブックマークはインメモリの保存先に読み書きする
     private let bookmarkStorage = InMemoryBookmarkStorage()
 
     /// 画面が表示された状態の ViewModel
     private func makeViewModel() -> RepositorySearchViewModel {
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
         viewModel.loadBookmarks()
         return viewModel
     }
@@ -26,8 +26,8 @@ struct RepositorySearchViewModelTests {
     private func search(_ viewModel: RepositorySearchViewModel, returning results: [Repository]) async {
         viewModel.query = "keyword"
         viewModel.search()
-        await service.waitForRequest(keyword: "keyword")
-        await service.respond(to: "keyword", with: .success(results))
+        await apiClient.waitForRequest(keyword: "keyword")
+        await apiClient.respond(to: "keyword", with: .success(results))
         await viewModel.searchTask?.value
     }
 
@@ -37,11 +37,11 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "swift"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "swift")
+        await apiClient.waitForRequest(keyword: "swift")
 
         #expect(viewModel.phase == .loading)
 
-        await service.respond(to: "swift", with: .success([.fixture(fullName: "apple/swift")]))
+        await apiClient.respond(to: "swift", with: .success([.fixture(fullName: "apple/swift")]))
         await viewModel.searchTask?.value
 
         #expect(viewModel.phase == .loaded)
@@ -53,18 +53,18 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
-        await service.waitForRequest(keyword: "second")
+        await apiClient.waitForRequest(keyword: "second")
 
         #expect(viewModel.phase == .loading)
         #expect(viewModel.repositories.map(\.fullName) == ["a/first"])
 
-        await service.respond(to: "second", with: .success([]))
+        await apiClient.respond(to: "second", with: .success([]))
         await viewModel.searchTask?.value
     }
 
@@ -74,11 +74,11 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "  swift \n"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "swift")
-        await service.respond(to: "swift", with: .success([]))
+        await apiClient.waitForRequest(keyword: "swift")
+        await apiClient.respond(to: "swift", with: .success([]))
         await viewModel.searchTask?.value
 
-        #expect(await service.requestedKeywords == ["swift"])
+        #expect(await apiClient.requestedKeywords == ["swift"])
     }
 
     @Test("空白だけのキーワードでは検索しない", arguments: ["", "   ", "\n"])
@@ -90,7 +90,7 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.searchTask == nil)
         #expect(viewModel.phase == .idle)
-        #expect(await service.requestedKeywords.isEmpty)
+        #expect(await apiClient.requestedKeywords.isEmpty)
     }
 
     @Test("結果 0 件の場合は空の結果で loaded になり、未検索（idle）と区別できる")
@@ -99,8 +99,8 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "no-hit"
 
         viewModel.search()
-        await service.waitForRequest(keyword: "no-hit")
-        await service.respond(to: "no-hit", with: .success([]))
+        await apiClient.waitForRequest(keyword: "no-hit")
+        await apiClient.respond(to: "no-hit", with: .success([]))
         await viewModel.searchTask?.value
 
         #expect(viewModel.repositories.isEmpty)
@@ -112,14 +112,14 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
-        await service.waitForRequest(keyword: "second")
-        await service.respond(to: "second", with: .failure(.network(.notConnectedToInternet)))
+        await apiClient.waitForRequest(keyword: "second")
+        await apiClient.respond(to: "second", with: .failure(.network(.notConnectedToInternet)))
         await viewModel.searchTask?.value
 
         #expect(viewModel.phase == .failed(.network(.notConnectedToInternet)))
@@ -131,8 +131,8 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .failure(.httpStatus(500)))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .failure(.httpStatus(500)))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
@@ -140,8 +140,8 @@ struct RepositorySearchViewModelTests {
 
         #expect(viewModel.phase == .loading)
 
-        await service.waitForRequest(keyword: "second")
-        await service.respond(to: "second", with: .success([]))
+        await apiClient.waitForRequest(keyword: "second")
+        await apiClient.respond(to: "second", with: .success([]))
         await viewModel.searchTask?.value
     }
 
@@ -151,15 +151,15 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "old"
         viewModel.search()
         let oldTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "old")
+        await apiClient.waitForRequest(keyword: "old")
 
         viewModel.query = "new"
         viewModel.search()
-        await service.waitForRequest(keyword: "new")
+        await apiClient.waitForRequest(keyword: "new")
 
-        await service.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
+        await apiClient.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
         await viewModel.searchTask?.value
-        await service.respond(to: "old", with: .success([.fixture(fullName: "old/result")]))
+        await apiClient.respond(to: "old", with: .success([.fixture(fullName: "old/result")]))
         await oldTask?.value
 
         #expect(viewModel.repositories.map(\.fullName) == ["new/result"])
@@ -172,14 +172,14 @@ struct RepositorySearchViewModelTests {
         viewModel.query = "old"
         viewModel.search()
         let oldTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "old")
+        await apiClient.waitForRequest(keyword: "old")
 
         viewModel.query = "new"
         viewModel.search()
-        await service.waitForRequest(keyword: "new")
-        await service.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
+        await apiClient.waitForRequest(keyword: "new")
+        await apiClient.respond(to: "new", with: .success([.fixture(fullName: "new/result")]))
         await viewModel.searchTask?.value
-        await service.respond(to: "old", with: .failure(.network(.timedOut)))
+        await apiClient.respond(to: "old", with: .failure(.network(.timedOut)))
         await oldTask?.value
 
         #expect(viewModel.phase == .loaded)
@@ -191,21 +191,21 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         viewModel.query = "first"
         viewModel.search()
-        await service.waitForRequest(keyword: "first")
-        await service.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
+        await apiClient.waitForRequest(keyword: "first")
+        await apiClient.respond(to: "first", with: .success([.fixture(fullName: "a/first")]))
         await viewModel.searchTask?.value
 
         viewModel.query = "second"
         viewModel.search()
         let inFlightTask = viewModel.searchTask
-        await service.waitForRequest(keyword: "second")
+        await apiClient.waitForRequest(keyword: "second")
 
         viewModel.query = ""
 
         #expect(viewModel.repositories.isEmpty)
         #expect(viewModel.phase == .idle)
 
-        await service.respond(to: "second", with: .success([.fixture(fullName: "b/second")]))
+        await apiClient.respond(to: "second", with: .success([.fixture(fullName: "b/second")]))
         await inFlightTask?.value
 
         #expect(viewModel.repositories.isEmpty)
@@ -240,7 +240,7 @@ struct RepositorySearchViewModelTests {
     func initDoesNotReadStorage() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
 
-        let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), bookmarkStorage: bookmarkStorage)
 
         #expect(!viewModel.isBookmarked(fullName: "a/one"))
     }
@@ -373,5 +373,21 @@ struct RepositorySearchViewModelTests {
         viewModel.isShowingBookmarkStorageError = false
 
         #expect(viewModel.bookmarkStorageError == nil)
+    }
+}
+
+/// 検索のリクエストを、キーワードで待機・応答できるようにする
+private extension StubAPIClient {
+    func waitForRequest(keyword: String) async {
+        await waitForRequest(RepositorySearchRequest(keyword: keyword))
+    }
+
+    func respond(to keyword: String, with result: Result<[Repository], APIError>) {
+        respond(to: RepositorySearchRequest(keyword: keyword), with: result.map(RepositorySearchResponse.init(items:)))
+    }
+
+    var requestedKeywords: [String] {
+        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: ""))
+        return requestedKeys.filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
     }
 }

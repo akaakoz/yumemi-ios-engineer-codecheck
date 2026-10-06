@@ -15,7 +15,7 @@ struct RepositoryDetailViewModelTests {
     func initialStateIsLoading() {
         let viewModel = RepositoryDetailViewModel(
             source: .remote(fullName: "apple/swift"),
-            apiService: StubRepositoryDetailAPIService(result: .success(.fixture()))
+            apiService: makeAPIService(result: .success(.fixture()))
         )
 
         #expect(viewModel.phase == .loading)
@@ -23,20 +23,23 @@ struct RepositoryDetailViewModelTests {
 
     @Test("リポジトリ名で問い合わせ、取得した詳細で loaded になる")
     func loadsRepositoryDetail() async {
-        let service = StubRepositoryDetailAPIService(result: .success(.fixture(subscribersCount: 2400)))
-        let viewModel = RepositoryDetailViewModel(source: .remote(fullName: "apple/swift"), apiService: service)
+        let apiClient = StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: .success(.fixture(subscribersCount: 2400)))
+        let viewModel = RepositoryDetailViewModel(
+            source: .remote(fullName: "apple/swift"),
+            apiService: RepositoryDetailAPIService(apiClient: apiClient)
+        )
 
         await viewModel.loadRepositoryDetail()
 
         #expect(viewModel.phase == .loaded(.fixture(subscribersCount: 2400)))
-        #expect(await service.requestedFullNames == ["apple/swift"])
+        #expect(await apiClient.requestedKeys == ["/repos/apple/swift"])
     }
 
     @Test("取得に失敗した場合は failed になる")
     func loadFailure() async {
         let viewModel = RepositoryDetailViewModel(
             source: .remote(fullName: "apple/swift"),
-            apiService: StubRepositoryDetailAPIService(result: .failure(.httpStatus(500)))
+            apiService: makeAPIService(result: .failure(.httpStatus(500)))
         )
 
         await viewModel.loadRepositoryDetail()
@@ -51,7 +54,7 @@ struct RepositoryDetailViewModelTests {
         let saved = RepositoryDetail.fixture(fullName: "apple/swift", stargazersCount: 1)
         let viewModel = RepositoryDetailViewModel(
             source: .saved(saved),
-            apiService: StubRepositoryDetailAPIService(result: .success(.fixture()))
+            apiService: makeAPIService(result: .success(.fixture()))
         )
 
         #expect(viewModel.phase == .loaded(saved))
@@ -62,13 +65,13 @@ struct RepositoryDetailViewModelTests {
     @Test("ブックマークに保存している詳細を使う場合は、リポジトリ API と通信しない")
     func savedSourceDoesNotFetch() async {
         let saved = RepositoryDetail.fixture(fullName: "apple/swift", stargazersCount: 1)
-        let service = StubRepositoryDetailAPIService(result: .success(.fixture(stargazersCount: 999)))
-        let viewModel = RepositoryDetailViewModel(source: .saved(saved), apiService: service)
+        let apiClient = StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: .success(.fixture(stargazersCount: 999)))
+        let viewModel = RepositoryDetailViewModel(source: .saved(saved), apiService: RepositoryDetailAPIService(apiClient: apiClient))
 
         await viewModel.loadRepositoryDetail()
 
         #expect(viewModel.phase == .loaded(saved))
-        #expect(await service.requestedFullNames.isEmpty)
+        #expect(await apiClient.requestedKeys.isEmpty)
     }
 
     @Test(
@@ -84,5 +87,10 @@ struct RepositoryDetailViewModelTests {
     )
     func failureMessageDependsOnError(error: APIError, expectedMessage: String) {
         #expect(RepositoryDetailViewModel.failureMessage(for: error) == expectedMessage)
+    }
+
+    /// リポジトリ API（apple/swift）に、指定した結果を返すサービス
+    private func makeAPIService(result: Result<RepositoryDetail, APIError>) -> RepositoryDetailAPIService {
+        RepositoryDetailAPIService(apiClient: StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: result))
     }
 }
