@@ -224,6 +224,44 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(app.activityIndicators.firstMatch.exists)
     }
 
+    // MARK: - 追加読み込み
+
+    /// 一番下までスクロールすると次のページを読み込み、読み込み中は一覧の下部にローディングを表示する
+    func testScrollingToBottomLoadsNextPage() throws {
+        let app = try launchApp(searchBehavior: .paginated)
+        let loadMoreIndicator = app.descendants(matching: .any)["repositorySearch.loadMoreIndicator"]
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+        // 1 ページ目の途中では、追加読み込みは始まらない
+        XCTAssertFalse(loadMoreIndicator.exists)
+
+        scrollUntilExists(repositoryRow(app, fullName: "paged/repo30"), in: app)
+
+        // モックサーバーは 2 ページ目を遅らせて返すため、その間は下部にローディングが出る
+        XCTAssertTrue(loadMoreIndicator.waitForExistence(timeout: timeout))
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
+        XCTAssertFalse(loadMoreIndicator.exists)
+    }
+
+    /// 追加読み込みに失敗しても、それまでの結果を残したまま、下部の「再試行」で読み込み直せる
+    func testLoadMoreFailureKeepsResultsAndCanRetry() throws {
+        let app = try launchApp(searchBehavior: .paginatedNextPageFailsOnce)
+        let retryButton = app.buttons["再試行"]
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+
+        scrollUntilExists(repositoryRow(app, fullName: "paged/repo30"), in: app)
+
+        XCTAssertTrue(retryButton.waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["GitHub で問題が発生しています。時間をおいて再度お試しください。"].exists)
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
+
+        tapWhenEnabled(retryButton)
+
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
+        XCTAssertFalse(retryButton.exists)
+    }
+
     /// モックサーバーを起動し、そこへ接続するようにアプリを起動する。サーバーはテスト終了時に止める。
     /// - Parameter bookmarkStorageSuiteName: ブックマークの保存先。起動し直しても同じ保存先を使いたい場合に指定する
     private func launchApp(
@@ -250,6 +288,16 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     private func terminate(_ app: XCUIApplication) {
         app.terminate()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: timeout), "アプリが終了しませんでした")
+    }
+
+    /// 要素が現れるまで、一覧を上にスワイプする。一覧の行は画面に入る直前に作られるため、スクロールしないと現れない
+    private func scrollUntilExists(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 15) {
+        var swipes = 0
+        while !element.exists && swipes < maxSwipes {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(element.exists, "\(maxSwipes) 回スワイプしても \(element) が現れませんでした")
     }
 
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {
