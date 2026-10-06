@@ -193,7 +193,20 @@ catch[^{]*[{][[:space:]]*[}]	空の catch でエラーを握りつぶさない
 nonisolated[(]unsafe[)]	nonisolated(unsafe) は使わない
 Task[.]sleep	Task.sleep で待ち合わせない（テストでも使わない）。完了を待てる仕組みにする'
 
-# git で管理している（gitignore の対象外の未追加ファイルも含む）Swift ファイルから、禁止している書き方を検出する。
+# lint の対象にする Swift ファイルを、NUL 区切りで出力する。
+# git で管理しているファイルと、gitignore の対象外の未追加ファイルが対象。
+# git rm せずに削除したファイルは git の一覧に残るため、ディスク上に存在するものだけに絞る
+list_swift_files() {
+    local file
+    git ls-files -z --cached --others --exclude-standard '*.swift' |
+        while IFS= read -r -d '' file; do
+            if [ -f "$file" ]; then
+                printf '%s\0' "$file"
+            fi
+        done
+}
+
+# 対象の Swift ファイルから、禁止している書き方を検出する。
 # - コメント（// 以降）は対象外
 # - やむを得ず使う行には「// harness:allow <理由>」を書くと対象外になる
 step_lint() {
@@ -202,7 +215,7 @@ step_lint() {
     local violations
     violations="$(
         cd "$ROOT_DIR" &&
-            git ls-files -z --cached --others --exclude-standard '*.swift' |
+            list_swift_files |
             HARNESS_FORBIDDEN_PATTERNS="$FORBIDDEN_PATTERNS" xargs -0 awk '
                 BEGIN {
                     count = split(ENVIRON["HARNESS_FORBIDDEN_PATTERNS"], lines, "\n")
