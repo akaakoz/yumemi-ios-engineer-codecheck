@@ -105,8 +105,8 @@ struct BookmarkViewModelTests {
         #expect(storage.saveCallCount == 0)
     }
 
-    @Test("保存に失敗した場合は、失敗を storageError として公開する")
-    func exposesSaveFailure() {
+    @Test("削除の保存に失敗した場合は一覧を変えず、失敗を storageError として公開する")
+    func removeKeepsListWhenSaveFails() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         storage.saveError = .saveFailed(description: "disk full")
         let viewModel = BookmarkViewModel(storage: storage)
@@ -114,7 +114,38 @@ struct BookmarkViewModelTests {
 
         viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
 
+        #expect(viewModel.bookmarks == [.fixture(fullName: "a/one")])
+        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
         #expect(viewModel.storageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("再登録の保存に失敗した場合は一覧を変えず、失敗を公開する")
+    func reAddKeepsListWhenSaveFails() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        storage.saveError = .saveFailed(description: "disk full")
+
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+
+        #expect(viewModel.bookmarks.isEmpty)
+        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(viewModel.storageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("保存に失敗した後に読み込み直しても、一覧が変わらない")
+    func listIsConsistentAfterReloadFollowingSaveFailure() {
+        let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
+        storage.saveError = .saveFailed(description: "disk full")
+        let viewModel = BookmarkViewModel(storage: storage)
+        viewModel.loadBookmarks()
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        let listBeforeReload = viewModel.bookmarks
+
+        viewModel.loadBookmarks()
+
+        #expect(viewModel.bookmarks == listBeforeReload)
     }
 
     // MARK: - 失敗の表示

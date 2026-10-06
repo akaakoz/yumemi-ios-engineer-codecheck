@@ -306,16 +306,54 @@ struct RepositorySearchViewModelTests {
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
     }
 
-    @Test("保存に失敗しても登録状態は変更後のまま残し、失敗を bookmarkStorageError として公開する")
-    func keepsBookmarkedStateWhenSaveFails() {
+    @Test("追加の保存に失敗した場合は登録状態を変えず、失敗を bookmarkStorageError として公開する")
+    func addKeepsStateWhenSaveFails() {
         bookmarkStorage.saveError = .saveFailed(description: "disk full")
         let viewModel = makeViewModel()
 
         viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
 
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
         #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("削除の保存に失敗した場合は登録状態を変えず、失敗を公開する")
+    func removeKeepsStateWhenSaveFails() throws {
+        try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
+        let viewModel = makeViewModel()
+        bookmarkStorage.saveError = .saveFailed(description: "disk full")
+
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+
+        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one")])
+        #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
+    }
+
+    @Test("操作時に保存済みのデータを読み込めない場合は、登録状態を変えず保存もしない")
+    func setBookmarkedKeepsStateWhenLoadFails() {
+        let viewModel = makeViewModel()
+        bookmarkStorage.loadError = .loadFailed(description: "broken")
+        let saveCountBefore = bookmarkStorage.saveCallCount
+
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+
+        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(bookmarkStorage.saveCallCount == saveCountBefore)
+        #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
+    }
+
+    @Test("保存に失敗した後に画面へ戻って読み込み直しても、登録状態が変わらない")
+    func stateIsConsistentAfterReloadFollowingSaveFailure() {
+        bookmarkStorage.saveError = .saveFailed(description: "disk full")
+        let viewModel = makeViewModel()
+        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        let stateBeforeReload = viewModel.isBookmarked(.fixture(fullName: "a/one"))
+
+        viewModel.loadBookmarks()
+
+        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")) == stateBeforeReload)
     }
 
     @Test("保存済みのブックマークを読み込めない場合は未登録として扱い、失敗を公開する")

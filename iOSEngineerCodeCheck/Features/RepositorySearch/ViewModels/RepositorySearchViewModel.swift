@@ -9,6 +9,7 @@ import os
 
 /// ブックマークは Bookmark タブとインスタンスを共有せず、保存先を通して同期する。
 /// 登録済みかどうかは、保存済みの一覧に含まれているかで決まる。
+/// 保存に成功したときだけ登録状態を変え、失敗したときは変えずに保存先の内容と食い違わないようにする。
 @MainActor
 @Observable
 final class RepositorySearchViewModel {
@@ -126,12 +127,6 @@ final class RepositorySearchViewModel {
             return
         }
 
-        if isBookmarked {
-            bookmarkedRepositoryIDs.insert(repository.id)
-        } else {
-            bookmarkedRepositoryIDs.remove(repository.id)
-        }
-
         guard var bookmarks = readStoredBookmarks() else {
             return
         }
@@ -140,7 +135,15 @@ final class RepositorySearchViewModel {
         } else {
             bookmarks.removeAll { $0.id == repository.id }
         }
-        saveBookmarks(bookmarks)
+        guard saveBookmarks(bookmarks) else {
+            return
+        }
+
+        if isBookmarked {
+            bookmarkedRepositoryIDs.insert(repository.id)
+        } else {
+            bookmarkedRepositoryIDs.remove(repository.id)
+        }
     }
 
     // MARK: - Private
@@ -163,13 +166,16 @@ final class RepositorySearchViewModel {
         }
     }
 
-    private func saveBookmarks(_ bookmarks: [Repository]) {
+    /// - Returns: 保存に成功した場合は true（失敗は `bookmarkStorageError` とログに残す）
+    private func saveBookmarks(_ bookmarks: [Repository]) -> Bool {
         do {
             try bookmarkStorage.saveBookmarks(bookmarks)
             bookmarkStorageError = nil
+            return true
         } catch {
             logger.error("Failed to save bookmarks: \(String(describing: error), privacy: .public)")
             bookmarkStorageError = error
+            return false
         }
     }
 }
