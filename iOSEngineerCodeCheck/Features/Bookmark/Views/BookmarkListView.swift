@@ -35,5 +35,14 @@ struct BookmarkListView: View {
             .onAppear {
                 viewModel.loadBookmarks()
             }
+            .alert(
+                "ブックマーク",
+                isPresented: $viewModel.isShowingStorageError,
+                presenting: viewModel.storageError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error.message)
+            }
     }
 }

@@ -116,4 +116,27 @@ struct BookmarkViewModelTests {
 
         #expect(viewModel.storageError == .saveFailed(description: "disk full"))
     }
+
+    // MARK: - 失敗の表示
+    @Test("失敗の表示を閉じると storageError がクリアされる")
+    func dismissingErrorClearsIt() {
+        let viewModel = BookmarkViewModel(storage: InMemoryBookmarkStorage(loadError: .loadFailed(description: "broken")))
+        viewModel.loadBookmarks()
+        #expect(viewModel.isShowingStorageError)
+
+        viewModel.isShowingStorageError = false
+
+        #expect(viewModel.storageError == nil)
+    }
+
+    @Test(
+        "失敗の種類に応じた文言を表示する",
+        arguments: [
+            (BookmarkStorageError.loadFailed(description: "broken"), "保存されていたブックマークを読み込めませんでした。読み込めなかったデータは別の場所に保管し、空の状態から始めます。"),
+            (BookmarkStorageError.saveFailed(description: "disk full"), "ブックマークを保存できませんでした。時間をおいて再度お試しください。"),
+        ]
+    )
+    func storageErrorMessage(error: BookmarkStorageError, expectedMessage: String) {
+        #expect(error.message == expectedMessage)
+    }
 }

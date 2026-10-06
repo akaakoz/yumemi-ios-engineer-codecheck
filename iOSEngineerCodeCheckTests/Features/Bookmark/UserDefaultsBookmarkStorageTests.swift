@@ -109,6 +109,47 @@ struct UserDefaultsBookmarkStorageTests {
         }
     }
 
+    @Test("壊れた保存データは別のキーに退避し、通常のキーは空にする")
+    func corruptedDataIsBackedUp() throws {
+        try withIsolatedUserDefaults { userDefaults in
+            let corruptedData = Data("not json".utf8)
+            userDefaults.set(corruptedData, forKey: UserDefaultsBookmarkStorage.storageKey)
+            let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
+
+            #expect(throws: BookmarkStorageError.self) {
+                try storage.loadBookmarks()
+            }
+
+            let backupKeys = userDefaults.dictionaryRepresentation().keys
+                .filter { $0.hasPrefix(UserDefaultsBookmarkStorage.corruptedDataKeyPrefix) }
+            #expect(backupKeys.count == 1)
+            let backupKey = try #require(backupKeys.first)
+            #expect(userDefaults.data(forKey: backupKey) == corruptedData)
+            #expect(userDefaults.data(forKey: UserDefaultsBookmarkStorage.storageKey) == nil)
+        }
+    }
+
+    @Test("退避した後は空の状態から読み込め、保存しても退避したデータは上書きされない")
+    func savingAfterBackupKeepsCorruptedData() throws {
+        try withIsolatedUserDefaults { userDefaults in
+            let corruptedData = Data("not json".utf8)
+            userDefaults.set(corruptedData, forKey: UserDefaultsBookmarkStorage.storageKey)
+            let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
+            #expect(throws: BookmarkStorageError.self) {
+                try storage.loadBookmarks()
+            }
+
+            let bookmarksAfterBackup = try storage.loadBookmarks()
+            try storage.saveBookmarks([.fixture(fullName: "a/one")])
+
+            #expect(bookmarksAfterBackup.isEmpty)
+            #expect(try storage.loadBookmarks() == [.fixture(fullName: "a/one")])
+            let backupKey = try #require(userDefaults.dictionaryRepresentation().keys
+                .first { $0.hasPrefix(UserDefaultsBookmarkStorage.corruptedDataKeyPrefix) })
+            #expect(userDefaults.data(forKey: backupKey) == corruptedData)
+        }
+    }
+
     @Test("保存先の切り替えが指定されている場合は、その領域に読み書きする")
     func defaultUserDefaultsUsesOverride() throws {
         try withIsolatedUserDefaults { standard in

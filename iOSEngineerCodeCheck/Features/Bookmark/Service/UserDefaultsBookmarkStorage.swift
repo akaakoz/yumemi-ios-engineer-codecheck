@@ -9,6 +9,8 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
 
     /// 保存済みのブックマークを読み込めるよう、値を変えないこと。
     static let storageKey = "data"
+    /// 読み込めなかった保存データを退避するキーの接頭辞。退避したデータを上書きしないよう、後ろに退避した日時を付ける。
+    static let corruptedDataKeyPrefix = "data.corrupted."
 
     /// 保存先の UserDefaults を別の領域（suite）に切り替えるキー（Debug ビルドのみ有効）。
     /// 起動引数 `-BookmarkStorageSuiteName <名前>` で指定でき、UI テストが端末の保存データと分けて検証するために使う。
@@ -42,7 +44,11 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
             let storedBookmarks = try JSONDecoder().decode([StoredBookmark].self, from: data)
             return storedBookmarks.filter { !$0.isRemoved }.map(\.repository)
         } catch {
-            throw .loadFailed(description: String(describing: error))
+            // 壊れたデータを次の保存で上書きして失わないよう、別のキーに退避してから空の状態にする
+            let backupKey = Self.corruptedDataKeyPrefix + Date().ISO8601Format()
+            userDefaults.set(data, forKey: backupKey)
+            userDefaults.removeObject(forKey: Self.storageKey)
+            throw .loadFailed(description: "\(error)（退避先: \(backupKey)）")
         }
     }
 

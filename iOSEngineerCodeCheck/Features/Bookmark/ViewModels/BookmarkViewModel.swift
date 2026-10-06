@@ -14,8 +14,17 @@ final class BookmarkViewModel {
 
     /// 追加した順に並ぶブックマーク
     private(set) var bookmarks: [Repository] = []
-    /// 画面には表示しない。原因調査とテストのために保持する。
+    /// 直近の読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
     private(set) var storageError: BookmarkStorageError?
+
+    var isShowingStorageError: Bool {
+        get { storageError != nil }
+        set {
+            if !newValue {
+                storageError = nil
+            }
+        }
+    }
 
     private let storage: BookmarkStorageProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "Bookmark")

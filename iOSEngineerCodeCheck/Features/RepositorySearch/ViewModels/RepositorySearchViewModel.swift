@@ -32,8 +32,17 @@ final class RepositorySearchViewModel {
     private(set) var phase = Phase.idle
     /// 直近に成功した検索の結果。新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
     private(set) var repositories: [Repository] = []
-    /// 画面には表示しない。原因調査とテストのために保持する。
+    /// 直近のブックマークの読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
     private(set) var bookmarkStorageError: BookmarkStorageError?
+
+    var isShowingBookmarkStorageError: Bool {
+        get { bookmarkStorageError != nil }
+        set {
+            if !newValue {
+                bookmarkStorageError = nil
+            }
+        }
+    }
 
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?

@@ -327,4 +327,15 @@ struct RepositorySearchViewModelTests {
         #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
         #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
     }
+
+    @Test("ブックマークの失敗の表示を閉じると bookmarkStorageError がクリアされる")
+    func dismissingBookmarkStorageErrorClearsIt() {
+        bookmarkStorage.loadError = .loadFailed(description: "broken")
+        let viewModel = makeViewModel()
+        #expect(viewModel.isShowingBookmarkStorageError)
+
+        viewModel.isShowingBookmarkStorageError = false
+
+        #expect(viewModel.bookmarkStorageError == nil)
+    }
 }

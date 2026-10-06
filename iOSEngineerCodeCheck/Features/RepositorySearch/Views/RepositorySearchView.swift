@@ -41,6 +41,15 @@ struct RepositorySearchView: View {
             .onAppear {
                 viewModel.loadBookmarks()
             }
+            .alert(
+                "ブックマーク",
+                isPresented: $viewModel.isShowingBookmarkStorageError,
+                presenting: viewModel.bookmarkStorageError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error.message)
+            }
             .onChange(of: isSelected) { _, isSelected in
                 if !isSelected {
                     isSearchFieldFocused = false
