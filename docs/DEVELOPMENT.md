@@ -127,6 +127,7 @@ xcrun simctl spawn booted log stream --level debug \
 | 症状 | 対処 |
 |---|---|
 | `指定されたシミュレータが見つかりません` | 表示された一覧から `DESTINATION` を指定する |
+| UI テストが `Timed out while launching application via Xcode` で失敗する（CI で起きやすい） | ランナーが遅く、アプリの起動が時間内に終わらなかったときの一時的な失敗。CI では実行結果の画面で Re-run failed jobs を押して再実行する。同じテストで繰り返し起きる場合は、`ui.xcresult` の操作の記録から、どの起動で失敗したかを調べる |
 | UI テストが、画面の要素を取得できずにタイムアウトして失敗する（コードの変更と関係なく） | シミュレータの状態が原因のことが多い。`xcrun simctl shutdown all` の後に再実行するか、Simulator の Device > Erase All Content and Settings を行う |
 | build だけ失敗し、Xcode では警告しか出ていない | harness は警告をエラーとして扱う。表示された警告を直す |
 | build の最初に SwiftLintPlugins の取得で失敗する | GitHub に接続できるかを確認する。初回のビルドだけ接続が必要 |
