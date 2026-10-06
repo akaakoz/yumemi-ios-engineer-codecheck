@@ -1,0 +1,52 @@
+# SwiftLint の設定。ビルドのたびに SwiftLintBuildToolPlugin（SPM）が実行する。
+# 検査するのは、プロジェクトのルールで禁止している書き方だけ（only_rules）。
+# 違反はすべて error にし、ビルドを失敗させる。
+# やむを得ず使う行は、直前に「// swiftlint:disable:next <ルール名>」と理由を書く。
+
+only_rules:
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - force_try
+  - force_cast
+  - custom_rules
+
+force_unwrapping:
+  severity: error
+implicitly_unwrapped_optional:
+  severity: error
+force_try:
+  severity: error
+force_cast:
+  severity: error
+
+custom_rules:
+  no_try_optional:
+    name: "try?"
+    regex: 'try\?'
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "try? でエラーを握りつぶさない。do-catch で扱う"
+    severity: error
+  no_empty_catch:
+    name: "空の catch"
+    regex: 'catch\b[^{]*\{\s*\}'
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "空の catch でエラーを握りつぶさない"
+    severity: error
+  no_unchecked_sendable:
+    name: "@unchecked Sendable"
+    regex: '@unchecked\s+Sendable'
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "@unchecked Sendable は使わない。Sendable を満たす型にする"
+    severity: error
+  no_nonisolated_unsafe:
+    name: "nonisolated(unsafe)"
+    regex: 'nonisolated\s*\(\s*unsafe\s*\)'
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "nonisolated(unsafe) は使わない"
+    severity: error
+  no_task_sleep:
+    name: "Task.sleep"
+    regex: '\bTask\.sleep\b'
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "Task.sleep で待ち合わせない（テストでも使わない）。完了を待てる仕組みにする"
+    severity: error

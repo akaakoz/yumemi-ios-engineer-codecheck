@@ -9,6 +9,12 @@
 
 set -uo pipefail
 
+# Apple Silicon の Mac で Rosetta（x86_64）として実行された場合は、arm64 で実行し直す。
+# SwiftLint（ビルドツールプラグイン）が x86_64 で起動すると、Xcode の arm64 用ライブラリを読み込めずに失敗するため
+if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = "1" ]; then
+    exec arch -arm64 /bin/bash "$0" "$@"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="iOSEngineerCodeCheck.xcodeproj"
 SCHEME="iOSEngineerCodeCheck"
@@ -264,8 +270,13 @@ step_lint() {
 step_build() {
     # 警告もエラーとして扱い、Swift 6 の並行処理の警告などを取りこぼさない。
     # project の設定は変えず、このスクリプトで実行するときだけ指定する。
-    # シミュレータ向けのため署名はしない（個人の開発チームに依存しない）
+    # シミュレータ向けのため署名はしない（個人の開発チームに依存しない）。
+    # SwiftLint（SwiftLintBuildToolPlugin）はビルドの中で実行される。
+    # - Package.resolved のバージョンだけを使い、手元と CI で同じ SwiftLint にする
+    # - コマンドからのビルドでは、Xcode で行う「プラグインを信頼する」操作ができないため、確認を省く
     run_xcodebuild build build-for-testing \
+        -onlyUsePackageVersionsFromResolvedFile \
+        -skipPackagePluginValidation \
         SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
         GCC_TREAT_WARNINGS_AS_ERRORS=YES \
         CODE_SIGNING_ALLOWED=NO
