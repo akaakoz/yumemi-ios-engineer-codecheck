@@ -40,7 +40,10 @@ private struct RepositoryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
+            // NavigationLink のラベルの中では複数行のテキストが中央揃えになるため、左揃えを明示する
             Text(fullName)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
 
             Spacer(minLength: 16)
 
