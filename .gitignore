@@ -136,3 +136,6 @@ iOSInjectionProject/
 
 # Xcode derived-data access logs (local environment metadata)
 .derived-data-log-*
+
+# Swift Package Manager の依存（SwiftLintPlugins）のバージョンを固定するため、Package.resolved は管理する
+!*.xcodeproj/project.xcworkspace/

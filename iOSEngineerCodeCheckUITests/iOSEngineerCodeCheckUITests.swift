@@ -24,7 +24,9 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         static let fixedLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
-    private let timeout: TimeInterval = 5
+    /// 要素が現れる・状態が変わるのを待つ上限。条件を満たした時点で待ちは終わるため、
+    /// 手元より遅い CI のランナーでも失敗しないよう、余裕を持たせている
+    private let timeout: TimeInterval = 15
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -61,7 +63,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         repositoryRow(app, fullName: "apple/swift").tap()
         tapWhenEnabled(addButton)
         XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
-        removeButton.tap()
+        tapWhenEnabled(removeButton)
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         tapWhenEnabled(addButton)
         XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
@@ -72,14 +74,14 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
         bookmarkRow.tap()
         XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
-        removeButton.tap()
+        tapWhenEnabled(removeButton)
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         tapWhenEnabled(addButton)
         XCTAssertTrue(removeButton.waitForExistence(timeout: timeout))
 
         // Search タブの詳細画面で削除すると、Bookmark タブの一覧からも消える
         app.tabBars.buttons["Search"].tap()
-        removeButton.tap()
+        tapWhenEnabled(removeButton)
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         app.tabBars.buttons["Bookmark"].tap()
         app.navigationBars.buttons.firstMatch.tap()
@@ -102,7 +104,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         // 削除しても詳細画面に留まり、追加し直せる。一覧に戻ると再登録されている
         bookmarkRow.tap()
-        removeButton.tap()
+        tapWhenEnabled(removeButton)
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         XCTAssertTrue(app.staticTexts["apple/swift"].exists)
         tapWhenEnabled(addButton)
@@ -111,21 +113,21 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
 
         // 再起動しても登録されたまま
-        app.terminate()
+        terminate(app)
         app.launch()
         app.tabBars.buttons["Bookmark"].tap()
         XCTAssertTrue(bookmarkRow.waitForExistence(timeout: timeout))
 
         // 削除して一覧に戻ると、すぐに消えている
         bookmarkRow.tap()
-        removeButton.tap()
+        tapWhenEnabled(removeButton)
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(emptyMessage.waitForExistence(timeout: timeout))
         XCTAssertFalse(bookmarkRow.exists)
 
         // 再起動しても削除されたまま
-        app.terminate()
+        terminate(app)
         app.launch()
         app.tabBars.buttons["Bookmark"].tap()
         XCTAssertTrue(emptyMessage.waitForExistence(timeout: timeout))
@@ -193,7 +195,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         repositoryRow(app, fullName: "apple/swift").tap()
         tapWhenEnabled(app.buttons["Add to Bookmark"])
         XCTAssertTrue(app.buttons["Remove from Bookmark"].waitForExistence(timeout: timeout))
-        app.terminate()
+        terminate(app)
 
         // 同じ保存先のまま、リポジトリ API が失敗する状態で起動し直す。通信していればエラーが表示される
         let failingApp = try launchApp(searchBehavior: .detailServerError, bookmarkStorageSuiteName: bookmarkStorageSuiteName)
@@ -206,7 +208,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(failingApp.buttons["再読み込み"].exists)
 
         // 削除してから、保存している値で追加し直せる
-        failingApp.buttons["Remove from Bookmark"].tap()
+        tapWhenEnabled(failingApp.buttons["Remove from Bookmark"])
         tapWhenEnabled(failingApp.buttons["Add to Bookmark"])
         XCTAssertTrue(failingApp.buttons["Remove from Bookmark"].waitForExistence(timeout: timeout))
     }
@@ -243,6 +245,13 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         return app
     }
 
+    /// アプリを終了し、終了しきったことを確かめる。
+    /// 終了しきる前に起動し直すと、CI のような遅い環境で起動が時間切れになることがあるため。
+    private func terminate(_ app: XCUIApplication) {
+        app.terminate()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: timeout), "アプリが終了しませんでした")
+    }
+
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {
         app.buttons["repositoryRow.\(fullName)"]
     }
@@ -254,7 +263,8 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         field.typeText(keyword + "\n")
     }
 
-    /// 詳細画面の「Add to Bookmark」は、リポジトリの詳細を取得できるまで押せないため、有効になるのを待ってから押す
+    /// 要素が現れて押せる状態になるのを待ってから押す。
+    /// 詳細画面の「Add to Bookmark」は詳細を取得できるまで押せず、画面遷移の直後のボタンは遅い環境では表示が遅れるため
     private func tapWhenEnabled(_ element: XCUIElement) {
         let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element)
         wait(for: [enabled], timeout: timeout)
