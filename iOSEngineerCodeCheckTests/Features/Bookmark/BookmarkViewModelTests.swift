@@ -60,10 +60,10 @@ struct BookmarkViewModelTests {
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
 
         #expect(viewModel.bookmarks == [.fixture(fullName: "b/two")])
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(storage.savedBookmarks == [.fixture(fullName: "b/two")])
     }
 
@@ -73,11 +73,11 @@ struct BookmarkViewModelTests {
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.removeBookmark(fullName: "a/one")
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
         #expect(viewModel.bookmarks == [.fixture(fullName: "b/two"), .fixture(fullName: "a/one")])
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
         #expect(storage.savedBookmarks == viewModel.bookmarks)
     }
 
@@ -86,7 +86,7 @@ struct BookmarkViewModelTests {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
 
         viewModel.loadBookmarks()
 
@@ -99,8 +99,8 @@ struct BookmarkViewModelTests {
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
-        viewModel.setBookmarked(.fixture(fullName: "b/two"), isBookmarked: false)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+        viewModel.removeBookmark(fullName: "b/two")
 
         #expect(storage.saveCallCount == 0)
     }
@@ -112,10 +112,10 @@ struct BookmarkViewModelTests {
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
 
         #expect(viewModel.bookmarks == [.fixture(fullName: "a/one")])
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
         #expect(viewModel.storageError == .saveFailed(description: "disk full"))
     }
 
@@ -124,13 +124,13 @@ struct BookmarkViewModelTests {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
         storage.saveError = .saveFailed(description: "disk full")
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
         #expect(viewModel.bookmarks.isEmpty)
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(viewModel.storageError == .saveFailed(description: "disk full"))
     }
 
@@ -140,7 +140,7 @@ struct BookmarkViewModelTests {
         storage.saveError = .saveFailed(description: "disk full")
         let viewModel = BookmarkViewModel(storage: storage)
         viewModel.loadBookmarks()
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
         let listBeforeReload = viewModel.bookmarks
 
         viewModel.loadBookmarks()

@@ -5,19 +5,27 @@
 
 import SwiftUI
 
-/// 値で遷移するため、詳細表示中に元の一覧から項目が消えても詳細画面は閉じない。
-struct RepositoryListView: View {
+/// 検索結果（`Repository`）とブックマーク（`RepositoryDetail`）の両方を表示できるようにする。
+protocol RepositoryListItem: Hashable, Identifiable {
+    var fullName: String { get }
+    var language: String? { get }
+}
 
-    let repositories: [Repository]
+extension Repository: RepositoryListItem {}
+
+/// 値で遷移するため、詳細表示中に元の一覧から項目が消えても詳細画面は閉じない。
+struct RepositoryListView<Item: RepositoryListItem>: View {
+
+    let items: [Item]
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(repositories) { repository in
-                    NavigationLink(value: repository) {
-                        RepositoryRow(repository: repository)
+                ForEach(items) { item in
+                    NavigationLink(value: item) {
+                        RepositoryRow(fullName: item.fullName, language: item.language)
                     }
-                    .accessibilityIdentifier("repositoryRow.\(repository.fullName)")
+                    .accessibilityIdentifier("repositoryRow.\(item.fullName)")
                     Divider()
                 }
             }
@@ -27,15 +35,16 @@ struct RepositoryListView: View {
 
 private struct RepositoryRow: View {
 
-    let repository: Repository
+    let fullName: String
+    let language: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(repository.fullName)
+            Text(fullName)
 
             Spacer(minLength: 16)
 
-            if let language = repository.language {
+            if let language {
                 Text(language)
                     .foregroundStyle(.secondary)
             }
@@ -48,7 +57,7 @@ private struct RepositoryRow: View {
 
 #Preview {
     NavigationStack {
-        RepositoryListView(repositories: [
+        RepositoryListView(items: [
             Repository(
                 fullName: "apple/swift",
                 language: "C++",

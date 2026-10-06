@@ -22,6 +22,8 @@ final class MockGitHubServer: Sendable {
         case noResults
         /// 検索 API が 500 を返す
         case serverError
+        /// 検索は成功し、リポジトリ API（詳細の取得）だけが 500 を返す
+        case detailServerError
     }
 
     private let listener: NWListener
@@ -79,11 +81,14 @@ final class MockGitHubServer: Sendable {
     /// - Parameter requestLine: 例 `GET /search/repositories?q=swift HTTP/1.1`
     private static func makeResponse(requestLine: String, behavior: Behavior) -> Data {
         let path = requestLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        if path.hasPrefix("/repos/") {
+            return makeRepositoryDetailResponse(path: path, behavior: behavior)
+        }
         guard path.hasPrefix("/search/repositories") else {
             return httpResponse(status: "404 Not Found", body: #"{"message": "Not Found"}"#)
         }
         switch behavior {
-        case .success, .slowSuccess:
+        case .success, .slowSuccess, .detailServerError:
             return httpResponse(status: "200 OK", body: searchResultsJSON)
         case .noResults:
             return httpResponse(status: "200 OK", body: #"{"total_count": 0, "incomplete_results": false, "items": []}"#)
@@ -91,6 +96,47 @@ final class MockGitHubServer: Sendable {
             return httpResponse(status: "500 Internal Server Error", body: #"{"message": "Server Error"}"#)
         }
     }
+
+    /// `GET /repos/{owner}/{repo}`。実際の Watch 数（`subscribers_count`）は、検索結果の `watchers_count`（Star 数と同じ値）とは違う値にする
+    private static func makeRepositoryDetailResponse(path: String, behavior: Behavior) -> Data {
+        switch behavior {
+        case .serverError, .detailServerError:
+            return httpResponse(status: "500 Internal Server Error", body: #"{"message": "Server Error"}"#)
+        case .success, .slowSuccess, .noResults:
+            guard let body = repositoryDetailJSONs[path] else {
+                return httpResponse(status: "404 Not Found", body: #"{"message": "Not Found"}"#)
+            }
+            return httpResponse(status: "200 OK", body: body)
+        }
+    }
+
+    /// リポジトリ API のパスごとの固定レスポンス
+    private static let repositoryDetailJSONs = [
+        "/repos/apple/swift": """
+            {
+              "full_name": "apple/swift",
+              "language": "C++",
+              "stargazers_count": 67000,
+              "watchers_count": 67000,
+              "subscribers_count": 2400,
+              "forks_count": 10000,
+              "open_issues_count": 7000,
+              "owner": { "avatar_url": "https://example.invalid/avatar.png" }
+            }
+            """,
+        "/repos/yumemi/sample": """
+            {
+              "full_name": "yumemi/sample",
+              "language": null,
+              "stargazers_count": 1,
+              "watchers_count": 1,
+              "subscribers_count": 1,
+              "forks_count": 0,
+              "open_issues_count": 0,
+              "owner": { "avatar_url": "https://example.invalid/avatar.png" }
+            }
+            """,
+    ]
 
     private static func httpResponse(status: String, body: String) -> Data {
         let bodyData = Data(body.utf8)
@@ -114,7 +160,7 @@ final class MockGitHubServer: Sendable {
               "full_name": "apple/swift",
               "language": "C++",
               "stargazers_count": 67000,
-              "watchers_count": 2400,
+              "watchers_count": 67000,
               "forks_count": 10000,
               "open_issues_count": 7000,
               "owner": { "avatar_url": "https://example.invalid/avatar.png" }

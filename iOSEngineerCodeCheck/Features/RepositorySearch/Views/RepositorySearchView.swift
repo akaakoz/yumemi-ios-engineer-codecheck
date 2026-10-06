@@ -18,7 +18,7 @@ struct RepositorySearchView: View {
     }
 
     var body: some View {
-        RepositoryListView(repositories: viewModel.repositories)
+        RepositoryListView(items: viewModel.repositories)
             // 検索中は前回の画面を操作できないようにする
             .disabled(viewModel.phase == .loading)
             .safeAreaInset(edge: .top) {
@@ -31,11 +31,10 @@ struct RepositorySearchView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Repository.self) { repository in
                 RepositoryDetailView(
-                    repository: repository,
-                    isBookmarked: Binding(
-                        get: { viewModel.isBookmarked(repository) },
-                        set: { viewModel.setBookmarked(repository, isBookmarked: $0) }
-                    )
+                    source: .remote(fullName: repository.fullName),
+                    isBookmarked: { viewModel.isBookmarked(fullName: repository.fullName) },
+                    addBookmark: { viewModel.addBookmark($0) },
+                    removeBookmark: { viewModel.removeBookmark(fullName: repository.fullName) }
                 )
             }
             .onAppear {

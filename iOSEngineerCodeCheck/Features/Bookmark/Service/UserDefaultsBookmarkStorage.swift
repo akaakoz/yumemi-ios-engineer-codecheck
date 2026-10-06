@@ -35,14 +35,14 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
         return standard
     }
 
-    func loadBookmarks() throws(BookmarkStorageError) -> [Repository] {
+    func loadBookmarks() throws(BookmarkStorageError) -> [RepositoryDetail] {
         guard let data = userDefaults.data(forKey: Self.storageKey) else {
             return []
         }
         do {
             // 保存済みのデータは camelCase のキーで保存されているため、キー変換をしない
             let storedBookmarks = try JSONDecoder().decode([StoredBookmark].self, from: data)
-            return storedBookmarks.filter { !$0.isRemoved }.map(\.repository)
+            return storedBookmarks.filter { !$0.isRemoved }.map(\.repositoryDetail)
         } catch {
             // 壊れたデータを次の保存で上書きして失わないよう、別のキーに退避してから空の状態にする
             let backupKey = Self.corruptedDataKeyPrefix + Date().ISO8601Format()
@@ -52,8 +52,8 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
         }
     }
 
-    /// `marked` を書かずに保存する（`Repository` の各項目だけを並べた JSON）
-    func saveBookmarks(_ bookmarks: [Repository]) throws(BookmarkStorageError) {
+    /// `marked` を書かずに保存する（`RepositoryDetail` の各項目だけを並べた JSON）
+    func saveBookmarks(_ bookmarks: [RepositoryDetail]) throws(BookmarkStorageError) {
         do {
             let data = try JSONEncoder().encode(bookmarks)
             userDefaults.set(data, forKey: Self.storageKey)
@@ -62,10 +62,8 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
         }
     }
 
-    /// 保存済みの 1 件。以前のバージョンは `Repository` の各項目と同じ階層に `marked` も保存しており、
-    /// Bookmark タブで削除した項目を `marked: false` として残していたため、読み込み時に除外する。
     private struct StoredBookmark: Decodable {
-        let repository: Repository
+        let repositoryDetail: RepositoryDetail
         let isRemoved: Bool
 
         private enum CodingKeys: String, CodingKey {
@@ -73,7 +71,7 @@ struct UserDefaultsBookmarkStorage: BookmarkStorageProtocol {
         }
 
         init(from decoder: any Decoder) throws {
-            repository = try Repository(from: decoder)
+            repositoryDetail = try RepositoryDetail(from: decoder)
             let container = try decoder.container(keyedBy: CodingKeys.self)
             // `marked` が無いデータ（このバージョン以降の保存形式）は登録済みとして扱う
             isRemoved = try container.decodeIfPresent(Bool.self, forKey: .marked) == false

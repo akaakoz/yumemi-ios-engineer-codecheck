@@ -242,7 +242,7 @@ struct RepositorySearchViewModelTests {
 
         let viewModel = RepositorySearchViewModel(apiService: service, bookmarkStorage: bookmarkStorage)
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
     }
 
     @Test("loadBookmarks で保存済みのブックマークを読み込み、登録済みかどうかを返す")
@@ -251,34 +251,32 @@ struct RepositorySearchViewModelTests {
 
         let viewModel = makeViewModel()
 
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "b/two")))
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
+        #expect(!viewModel.isBookmarked(fullName: "b/two"))
     }
 
     @Test("追加すると、登録済みとして末尾に追加して保存する")
-    func addBookmarkAppendsAndSaves() async throws {
+    func addBookmarkAppendsAndSaves() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one")])
         let viewModel = makeViewModel()
-        let repository = Repository.fixture(fullName: "b/two")
-        await search(viewModel, returning: [repository])
+        let repository = RepositoryDetail.fixture(fullName: "b/two")
 
-        viewModel.setBookmarked(repository, isBookmarked: true)
+        viewModel.addBookmark(repository)
 
         #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        #expect(viewModel.isBookmarked(repository))
+        #expect(viewModel.isBookmarked(fullName: repository.fullName))
     }
 
     @Test("削除すると、保存済みの一覧から削除して保存する")
-    func removeBookmarkRemovesAndSaves() async throws {
+    func removeBookmarkRemovesAndSaves() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
         let viewModel = makeViewModel()
-        let repository = Repository.fixture(fullName: "a/one")
-        await search(viewModel, returning: [repository])
+        let repository = RepositoryDetail.fixture(fullName: "a/one")
 
-        viewModel.setBookmarked(repository, isBookmarked: false)
+        viewModel.removeBookmark(fullName: repository.fullName)
 
         #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "b/two")])
-        #expect(!viewModel.isBookmarked(repository))
+        #expect(!viewModel.isBookmarked(fullName: repository.fullName))
     }
 
     @Test("登録状態が変わらない操作では保存しない")
@@ -287,21 +285,21 @@ struct RepositorySearchViewModelTests {
         let saveCountBefore = bookmarkStorage.saveCallCount
         let viewModel = makeViewModel()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
-        viewModel.setBookmarked(.fixture(fullName: "b/two"), isBookmarked: false)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+        viewModel.removeBookmark(fullName: "b/two")
 
         #expect(bookmarkStorage.saveCallCount == saveCountBefore)
     }
 
-    @Test("スター数などが変わっていても fullName が同じなら同じリポジトリとして扱う")
+    @Test("保存したときとスター数などが変わっていても、fullName が同じなら同じリポジトリとして扱う")
     func identifiesBookmarkByFullName() throws {
         try bookmarkStorage.saveBookmarks([.fixture(fullName: "apple/swift", stargazersCount: 1)])
         let viewModel = makeViewModel()
-        let latestSearchResult = Repository.fixture(fullName: "apple/swift", stargazersCount: 999)
+        let latestSearchResult = RepositoryDetail.fixture(fullName: "apple/swift", stargazersCount: 999)
 
-        #expect(viewModel.isBookmarked(latestSearchResult))
+        #expect(viewModel.isBookmarked(fullName: latestSearchResult.fullName))
 
-        viewModel.setBookmarked(latestSearchResult, isBookmarked: false)
+        viewModel.removeBookmark(fullName: latestSearchResult.fullName)
 
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
     }
@@ -311,9 +309,9 @@ struct RepositorySearchViewModelTests {
         bookmarkStorage.saveError = .saveFailed(description: "disk full")
         let viewModel = makeViewModel()
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(bookmarkStorage.savedBookmarks.isEmpty)
         #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
     }
@@ -324,22 +322,22 @@ struct RepositorySearchViewModelTests {
         let viewModel = makeViewModel()
         bookmarkStorage.saveError = .saveFailed(description: "disk full")
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: false)
+        viewModel.removeBookmark(fullName: "a/one")
 
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(viewModel.isBookmarked(fullName: "a/one"))
         #expect(bookmarkStorage.savedBookmarks == [.fixture(fullName: "a/one")])
         #expect(viewModel.bookmarkStorageError == .saveFailed(description: "disk full"))
     }
 
     @Test("操作時に保存済みのデータを読み込めない場合は、登録状態を変えず保存もしない")
-    func setBookmarkedKeepsStateWhenLoadFails() {
+    func addBookmarkKeepsStateWhenLoadFails() {
         let viewModel = makeViewModel()
         bookmarkStorage.loadError = .loadFailed(description: "broken")
         let saveCountBefore = bookmarkStorage.saveCallCount
 
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(bookmarkStorage.saveCallCount == saveCountBefore)
         #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
     }
@@ -348,12 +346,12 @@ struct RepositorySearchViewModelTests {
     func stateIsConsistentAfterReloadFollowingSaveFailure() {
         bookmarkStorage.saveError = .saveFailed(description: "disk full")
         let viewModel = makeViewModel()
-        viewModel.setBookmarked(.fixture(fullName: "a/one"), isBookmarked: true)
-        let stateBeforeReload = viewModel.isBookmarked(.fixture(fullName: "a/one"))
+        viewModel.addBookmark(.fixture(fullName: "a/one"))
+        let stateBeforeReload = viewModel.isBookmarked(fullName: "a/one")
 
         viewModel.loadBookmarks()
 
-        #expect(viewModel.isBookmarked(.fixture(fullName: "a/one")) == stateBeforeReload)
+        #expect(viewModel.isBookmarked(fullName: "a/one") == stateBeforeReload)
     }
 
     @Test("保存済みのブックマークを読み込めない場合は未登録として扱い、失敗を公開する")
@@ -362,7 +360,7 @@ struct RepositorySearchViewModelTests {
 
         let viewModel = makeViewModel()
 
-        #expect(!viewModel.isBookmarked(.fixture(fullName: "a/one")))
+        #expect(!viewModel.isBookmarked(fullName: "a/one"))
         #expect(viewModel.bookmarkStorageError == .loadFailed(description: "broken"))
     }
 

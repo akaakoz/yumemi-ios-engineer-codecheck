@@ -34,7 +34,10 @@ struct UserDefaultsBookmarkStorageTests {
     func saveAndLoadRoundTrip() throws {
         try withIsolatedUserDefaults { userDefaults in
             let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
-            let bookmarks: [Repository] = [.fixture(fullName: "b/two"), .fixture(fullName: "a/one", language: nil)]
+            let bookmarks: [RepositoryDetail] = [
+                .fixture(fullName: "b/two"),
+                .fixture(fullName: "a/one", language: nil, subscribersCount: nil),
+            ]
 
             try storage.saveBookmarks(bookmarks)
             let loadedBookmarks = try storage.loadBookmarks()
@@ -77,7 +80,39 @@ struct UserDefaultsBookmarkStorageTests {
         }
     }
 
-    @Test("Repository の各項目を camelCase のキーで保存し、marked は保存しない")
+    @Test("検索結果（Repository）の形式で保存されていたブックマークを、Watch 数を nil として RepositoryDetail に移行する")
+    func migratesRepositoryFormatToRepositoryDetail() throws {
+        try withIsolatedUserDefaults { userDefaults in
+            let repositoryFormatJSON = """
+                [
+                  {
+                    "fullName": "apple/swift", "language": "C++",
+                    "stargazersCount": 67000, "watchersCount": 67000, "forksCount": 10000, "openIssuesCount": 7000,
+                    "owner": { "avatarUrl": "https://avatars.githubusercontent.com/u/10639145" }
+                  }
+                ]
+                """
+            userDefaults.set(Data(repositoryFormatJSON.utf8), forKey: UserDefaultsBookmarkStorage.storageKey)
+            let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
+
+            let bookmarks = try storage.loadBookmarks()
+
+            // Star 数と同じ値の watchersCount は Watch 数として移行しない
+            #expect(bookmarks == [
+                RepositoryDetail(
+                    fullName: "apple/swift",
+                    language: "C++",
+                    stargazersCount: 67000,
+                    subscribersCount: nil,
+                    forksCount: 10000,
+                    openIssuesCount: 7000,
+                    owner: .init(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
+                ),
+            ])
+        }
+    }
+
+    @Test("RepositoryDetail の各項目を camelCase のキーで保存し、marked は保存しない")
     func savesRepositoryFieldsWithoutMarked() throws {
         try withIsolatedUserDefaults { userDefaults in
             let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
@@ -88,6 +123,7 @@ struct UserDefaultsBookmarkStorageTests {
             let json = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
             #expect(json.first?["fullName"] as? String == "apple/swift")
             #expect(json.first?["stargazersCount"] as? Int == 100)
+            #expect(json.first?["subscribersCount"] as? Int == 2400)
             #expect((json.first?["owner"] as? [String: Any])?["avatarUrl"] is String)
             #expect(json.first?["marked"] == nil)
         }

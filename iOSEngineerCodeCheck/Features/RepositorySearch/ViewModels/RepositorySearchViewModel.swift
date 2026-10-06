@@ -49,7 +49,7 @@ final class RepositorySearchViewModel {
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
     /// ブックマーク済みのリポジトリ。ブックマークの登録・削除は Search タブからしか行えないため、
     /// `loadBookmarks()` で読み込んだ後はこの ViewModel での変更に合わせて更新すれば保存内容と一致する。
-    private var bookmarkedRepositoryIDs: Set<Repository.ID> = []
+    private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
     private let apiService: RepositorySearchAPIServiceProtocol
     private let bookmarkStorage: BookmarkStorageProtocol
@@ -118,32 +118,37 @@ final class RepositorySearchViewModel {
         bookmarkedRepositoryIDs = Set(bookmarks.map(\.id))
     }
 
-    func isBookmarked(_ repository: Repository) -> Bool {
-        bookmarkedRepositoryIDs.contains(repository.id)
+    func isBookmarked(fullName: String) -> Bool {
+        bookmarkedRepositoryIDs.contains(fullName)
     }
 
-    func setBookmarked(_ repository: Repository, isBookmarked: Bool) {
-        guard isBookmarked != self.isBookmarked(repository) else {
+    /// 詳細画面で取得した `RepositoryDetail` をブックマークに追加する。
+    func addBookmark(_ repositoryDetail: RepositoryDetail) {
+        guard !isBookmarked(fullName: repositoryDetail.fullName) else {
             return
         }
-
         guard var bookmarks = readStoredBookmarks() else {
             return
         }
-        if isBookmarked {
-            bookmarks.append(repository)
-        } else {
-            bookmarks.removeAll { $0.id == repository.id }
-        }
+        bookmarks.append(repositoryDetail)
         guard saveBookmarks(bookmarks) else {
             return
         }
+        bookmarkedRepositoryIDs.insert(repositoryDetail.fullName)
+    }
 
-        if isBookmarked {
-            bookmarkedRepositoryIDs.insert(repository.id)
-        } else {
-            bookmarkedRepositoryIDs.remove(repository.id)
+    func removeBookmark(fullName: String) {
+        guard isBookmarked(fullName: fullName) else {
+            return
         }
+        guard var bookmarks = readStoredBookmarks() else {
+            return
+        }
+        bookmarks.removeAll { $0.fullName == fullName }
+        guard saveBookmarks(bookmarks) else {
+            return
+        }
+        bookmarkedRepositoryIDs.remove(fullName)
     }
 
     // MARK: - Private
@@ -156,7 +161,7 @@ final class RepositorySearchViewModel {
     }
 
     /// - Returns: 読み込めなかった場合は `nil`（失敗は `bookmarkStorageError` とログに残す）
-    private func readStoredBookmarks() -> [Repository]? {
+    private func readStoredBookmarks() -> [RepositoryDetail]? {
         do {
             return try bookmarkStorage.loadBookmarks()
         } catch {
@@ -167,7 +172,7 @@ final class RepositorySearchViewModel {
     }
 
     /// - Returns: 保存に成功した場合は true（失敗は `bookmarkStorageError` とログに残す）
-    private func saveBookmarks(_ bookmarks: [Repository]) -> Bool {
+    private func saveBookmarks(_ bookmarks: [RepositoryDetail]) -> Bool {
         do {
             try bookmarkStorage.saveBookmarks(bookmarks)
             bookmarkStorageError = nil
