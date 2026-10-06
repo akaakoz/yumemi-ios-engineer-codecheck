@@ -19,7 +19,7 @@ struct MainTabView: View {
             bookmarkTab
             searchTab
         }
-        .tint(.black)
+        .tint(.primary)
         .background(.ultraThinMaterial)
     }
 
