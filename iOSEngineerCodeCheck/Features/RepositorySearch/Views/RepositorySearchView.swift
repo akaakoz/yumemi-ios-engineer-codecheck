@@ -11,6 +11,7 @@ struct RepositorySearchView: View {
 
     @State private var viewModel: RepositorySearchViewModel
     @FocusState private var isSearchFieldFocused: Bool
+    @State private var listScrollPosition = ScrollPosition(edge: .top)
 
     init(isSelected: Bool, viewModel: RepositorySearchViewModel = RepositorySearchViewModel()) {
         self.isSelected = isSelected
@@ -18,11 +19,10 @@ struct RepositorySearchView: View {
     }
 
     var body: some View {
-        RepositoryListView(
-            items: viewModel.repositories,
-            onLastItemAppear: { viewModel.loadMoreIfNeeded() },
-            footer: { loadMoreFooter }
-        )
+        RepositoryListView(items: viewModel.repositories) {
+            loadMoreFooter
+        }
+            .scrollPosition($listScrollPosition)
             // 検索中は前回の画面を操作できないようにする
             .disabled(viewModel.phase == .loading)
             .safeAreaInset(edge: .top) {
@@ -53,6 +53,12 @@ struct RepositorySearchView: View {
             } message: { error in
                 Text(error.message)
             }
+            .onChange(of: viewModel.phase) { _, phase in
+                // 新しい検索の結果は一番上から表示する
+                if phase == .loading {
+                    listScrollPosition.scrollTo(edge: .top)
+                }
+            }
             .onChange(of: isSelected) { _, isSelected in
                 if !isSelected {
                     isSearchFieldFocused = false
@@ -74,17 +80,20 @@ struct RepositorySearchView: View {
             .background(.bar)
     }
 
-    /// 一覧の一番下に、追加読み込みの状態を表示する
+    /// 一覧の一番下に、追加読み込みの状態を表示する。
+    /// 次のページがある間はローディングを表示し、それが画面に現れたら続きを読み込む。
     @ViewBuilder
     private var loadMoreFooter: some View {
         switch viewModel.loadMorePhase {
+        case .idle where viewModel.phase == .loaded && viewModel.hasNextPage:
+            loadMoreIndicator
+                .onAppear {
+                    viewModel.loadMoreIfNeeded()
+                }
         case .idle:
             EmptyView()
         case .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .accessibilityIdentifier("repositorySearch.loadMoreIndicator")
+            loadMoreIndicator
         case .failed(let error):
             VStack(spacing: 8) {
                 Text(RepositorySearchViewModel.failureMessage(for: error))
@@ -97,6 +106,13 @@ struct RepositorySearchView: View {
             .frame(maxWidth: .infinity)
             .padding(16)
         }
+    }
+
+    private var loadMoreIndicator: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .accessibilityIdentifier("repositorySearch.loadMoreIndicator")
     }
 
     @ViewBuilder

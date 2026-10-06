@@ -254,6 +254,7 @@ struct RepositorySearchViewModelTests {
     @Test("最後まで表示されたら次のページを同じキーワードで読み込み、通信中は loading、成功すると末尾に足す")
     func loadMoreAppendsNextPage() async {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
+        #expect(viewModel.hasNextPage)
 
         viewModel.loadMoreIfNeeded()
         await apiClient.waitForRequest(keyword: "swift", page: 2)
@@ -272,6 +273,7 @@ struct RepositorySearchViewModelTests {
     @Test("次のページが無い場合は読み込まない")
     func loadMoreDoesNothingWithoutNextPage() async {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")], totalCount: 1)
+        #expect(!viewModel.hasNextPage)
 
         viewModel.loadMoreIfNeeded()
 
@@ -287,6 +289,7 @@ struct RepositorySearchViewModelTests {
         await apiClient.respond(to: "swift", page: 2, totalCount: 31, with: .success([.fixture(fullName: "b/two")]))
         await viewModel.loadMoreTask?.value
         let requestCount = await apiClient.requestedKeys.count
+        #expect(!viewModel.hasNextPage)
 
         viewModel.loadMoreIfNeeded()
 
@@ -327,16 +330,20 @@ struct RepositorySearchViewModelTests {
         #expect(viewModel.repositories[1].stargazersCount == 100)
     }
 
-    @Test("次のページがすべて表示済みのリポジトリだった場合は、続けて次のページを読み込む")
-    func loadMoreContinuesWhenPageHasNoNewRepositories() async {
+    @Test("次のページがすべて表示済みのリポジトリだった場合も、続きのページがある状態に戻り、次のページを読み込める")
+    func loadMoreAfterPageWithNoNewRepositories() async {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
         viewModel.loadMoreIfNeeded()
         await apiClient.waitForRequest(keyword: "swift", page: 2)
         await apiClient.respond(to: "swift", page: 2, totalCount: 100, with: .success([.fixture(fullName: "a/one")]))
         await viewModel.loadMoreTask?.value
 
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
+        #expect(viewModel.loadMorePhase == .idle)
+        #expect(viewModel.hasNextPage)
+
+        viewModel.loadMoreIfNeeded()
         await apiClient.waitForRequest(keyword: "swift", page: 3)
-        #expect(viewModel.loadMorePhase == .loading)
         await apiClient.respond(to: "swift", page: 3, totalCount: 100, with: .success([.fixture(fullName: "c/three")]))
         await viewModel.loadMoreTask?.value
 
@@ -384,6 +391,7 @@ struct RepositorySearchViewModelTests {
         let viewModel = await makeViewModelShowingFirstPage([.fixture(fullName: "a/one")])
         viewModel.query = "kotlin"
         viewModel.search()
+        #expect(!viewModel.hasNextPage)
 
         viewModel.loadMoreIfNeeded()
 

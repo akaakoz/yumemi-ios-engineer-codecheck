@@ -66,7 +66,12 @@ final class RepositorySearchViewModel {
     /// 実行中の追加読み込み。新しい検索を始めるときにキャンセルし、前の検索の続きを新しい結果に混ぜない。
     @ObservationIgnored private(set) var loadMoreTask: Task<Void, Never>?
     /// 次のページが無い場合（最後まで読み込んだ、またはまだ検索に成功していない）は `nil`
-    @ObservationIgnored private var nextPage: NextPage?
+    private var nextPage: NextPage?
+
+    /// 表示中の結果に続きのページがあるか
+    var hasNextPage: Bool {
+        nextPage != nil
+    }
     /// 表示用のブックマーク済みのリポジトリ。
     private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
@@ -109,7 +114,7 @@ final class RepositorySearchViewModel {
         }
     }
 
-    /// 一覧の最後まで表示されたときに呼ぶ。次のページがあれば、同じ検索条件で読み込んで結果の末尾に足す。
+    /// 一覧の一番下が表示されたときに呼ぶ。次のページがあれば、同じ検索条件で読み込んで結果の末尾に足す。
     /// 最初の検索の通信中・追加読み込みの通信中・追加読み込みの失敗後（`retryLoadMore()` を待つ）は何もしない。
     func loadMoreIfNeeded() {
         guard phase == .loaded, loadMorePhase == .idle, let nextPage else {
@@ -203,14 +208,9 @@ final class RepositorySearchViewModel {
                 guard !Task.isCancelled else { return }
                 let existingIDs = Set(repositories.map(\.id))
                 // 検索結果の順位は読み込みの間にも変わるため、前のページで表示したリポジトリが再び含まれることがある
-                let newRepositories = Self.removingDuplicates(result.repositories).filter { !existingIDs.contains($0.id) }
-                repositories += newRepositories
+                repositories += Self.removingDuplicates(result.repositories).filter { !existingIDs.contains($0.id) }
                 nextPage = result.hasNextPage ? NextPage(keyword: page.keyword, page: page.page + 1) : nil
                 loadMorePhase = .idle
-                // すべて表示済みだった場合は一覧の最後の行が変わらず、次の読み込みのきっかけが無いため、続けて読み込む
-                if newRepositories.isEmpty {
-                    loadMoreIfNeeded()
-                }
             } catch {
                 guard !Task.isCancelled else { return }
                 logger.error("Loading more search results failed: \(String(describing: error), privacy: .public)")

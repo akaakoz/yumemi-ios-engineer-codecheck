@@ -17,14 +17,11 @@ extension Repository: RepositoryListItem {}
 struct RepositoryListView<Item: RepositoryListItem, Footer: View>: View {
 
     let items: [Item]
-    /// 最後の行が表示されたときに呼ぶ
-    let onLastItemAppear: (() -> Void)?
     /// 一覧の一番下に表示する内容（追加読み込みの状態など）
     let footer: Footer
 
-    init(items: [Item], onLastItemAppear: (() -> Void)? = nil, @ViewBuilder footer: () -> Footer) {
+    init(items: [Item], @ViewBuilder footer: () -> Footer) {
         self.items = items
-        self.onLastItemAppear = onLastItemAppear
         self.footer = footer()
     }
 
@@ -36,11 +33,6 @@ struct RepositoryListView<Item: RepositoryListItem, Footer: View>: View {
                         RepositoryRow(fullName: item.fullName, language: item.language)
                     }
                     .accessibilityIdentifier("repositoryRow.\(item.fullName)")
-                    .onAppear {
-                        if item.id == items.last?.id {
-                            onLastItemAppear?()
-                        }
-                    }
                     Divider()
                 }
                 footer

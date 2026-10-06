@@ -226,21 +226,19 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
     // MARK: - 追加読み込み
 
-    /// 一番下までスクロールすると次のページを読み込み、読み込み中は一覧の下部にローディングを表示する
+    /// 一番下までスクロールすると下部にローディングが出て次のページを読み込み、最後のページまで読み込むと消える
     func testScrollingToBottomLoadsNextPage() throws {
         let app = try launchApp(searchBehavior: .paginated)
-        let loadMoreIndicator = app.descendants(matching: .any)["repositorySearch.loadMoreIndicator"]
+        let loadMoreIndicator = loadMoreIndicator(app)
         search(app, keyword: "swift")
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
-        // 1 ページ目の途中では、追加読み込みは始まらない
+        // 1 ページ目の途中では、下部のローディングは出ない
         XCTAssertFalse(loadMoreIndicator.exists)
 
-        scrollUntilExists(repositoryRow(app, fullName: "paged/repo30"), in: app)
+        scrollUntilExists(loadMoreIndicator, in: app)
 
-        // モックサーバーは 2 ページ目を遅らせて返すため、その間は下部にローディングが出る
-        XCTAssertTrue(loadMoreIndicator.waitForExistence(timeout: timeout))
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
-        XCTAssertFalse(loadMoreIndicator.exists)
+        XCTAssertTrue(waitForNonExistence(of: loadMoreIndicator))
     }
 
     /// 追加読み込みに失敗しても、それまでの結果を残したまま、下部の「再試行」で読み込み直せる
@@ -250,9 +248,8 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         search(app, keyword: "swift")
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
 
-        scrollUntilExists(repositoryRow(app, fullName: "paged/repo30"), in: app)
+        scrollUntilExists(retryButton, in: app)
 
-        XCTAssertTrue(retryButton.waitForExistence(timeout: timeout))
         XCTAssertTrue(app.staticTexts["GitHub で問題が発生しています。時間をおいて再度お試しください。"].exists)
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
 
@@ -260,6 +257,32 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
         XCTAssertFalse(retryButton.exists)
+    }
+
+    /// 一番下を表示したまま検索し直すと、新しい結果を一番上から 1 ページ目だけ表示し、一番下までスクロールすると続きを読み込める
+    func testSearchingAgainWhileScrolledToBottomStillLoadsNextPage() throws {
+        let app = try launchApp(searchBehavior: .paginated)
+        let field = app.textFields["repositorySearch.field"]
+        let lastRow = repositoryRow(app, fullName: "paged/repo31")
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+        scrollUntilExists(loadMoreIndicator(app), in: app)
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
+
+        // 入力はそのままで、もう一度検索する。一番上に戻り、1 ページ目だけの結果になる
+        field.tap()
+        field.typeText("\n")
+        XCTAssertTrue(waitForNonExistence(of: lastRow))
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").isHittable)
+        XCTAssertFalse(loadMoreIndicator(app).exists)
+
+        // 一番下まで行っても、2 ページ目が返るまでは新しい 1 ページ目の 30 件だけが並ぶ（モックは 2 ページ目を遅らせて返す）
+        scrollUntilExists(loadMoreIndicator(app), in: app)
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
+        XCTAssertFalse(lastRow.exists)
+
+        // 新しい結果の続き（2 ページ目）を読み込む
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
     }
 
     /// モックサーバーを起動し、そこへ接続するようにアプリを起動する。サーバーはテスト終了時に止める。
@@ -298,6 +321,17 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(element.exists, "\(maxSwipes) 回スワイプしても \(element) が現れませんでした")
+    }
+
+    /// 要素が消えるのを待つ。消えたら true
+    private func waitForNonExistence(of element: XCUIElement) -> Bool {
+        let disappeared = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [disappeared], timeout: timeout) == .completed
+    }
+
+    /// 検索結果の一覧の下部に、続きのページがある間・読み込み中に表示するローディング
+    private func loadMoreIndicator(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["repositorySearch.loadMoreIndicator"]
     }
 
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {
