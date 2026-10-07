@@ -40,6 +40,10 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         let resultRow = repositoryRow(app, fullName: "apple/swift")
         XCTAssertTrue(resultRow.waitForExistence(timeout: timeout))
         XCTAssertTrue(repositoryRow(app, fullName: "yumemi/sample").exists)
+        // 開かずに判断できるよう、行に説明文・Star 数・言語を表示する
+        XCTAssertTrue(resultRow.label.contains("The Swift Programming Language"), resultRow.label)
+        XCTAssertTrue(resultRow.label.contains("67,000"), resultRow.label)
+        XCTAssertTrue(resultRow.label.contains("C++"), resultRow.label)
 
         resultRow.tap()
 

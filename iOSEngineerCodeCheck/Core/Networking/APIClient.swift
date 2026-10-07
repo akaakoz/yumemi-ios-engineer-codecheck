@@ -90,6 +90,8 @@ struct APIClient: APIClientProtocol {
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // GitHub の日時は ISO 8601 形式（例: 2024-01-01T12:34:56Z）
+        decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
 }

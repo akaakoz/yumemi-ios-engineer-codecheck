@@ -13,6 +13,8 @@ import Foundation
 ///   保存済みのブックマークを読み込めるよう、プロパティ名を変えないこと。
 struct RepositoryDetail: Codable, Hashable, Identifiable, Sendable {
     let fullName: String
+    /// 説明文。設定されていない場合と、説明文を保存していなかった以前の形式のブックマークから読み込んだ場合は `nil`
+    let description: String?
     let language: String?
     let stargazersCount: Int
     /// 実際の Watch 数（リポジトリの通知を受け取っている人数）。
@@ -21,6 +23,8 @@ struct RepositoryDetail: Codable, Hashable, Identifiable, Sendable {
     let subscribersCount: Int?
     let forksCount: Int
     let openIssuesCount: Int
+    /// 最後にコードが push された日時。日時を保存していなかった以前の形式のブックマークから読み込んだ場合は `nil`
+    let pushedAt: Date?
     let owner: Owner
 
     /// GitHub 上で一意な "owner/name" を識別子にする

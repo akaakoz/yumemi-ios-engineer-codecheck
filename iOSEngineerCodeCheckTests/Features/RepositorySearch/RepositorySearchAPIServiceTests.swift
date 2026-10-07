@@ -25,11 +25,13 @@ struct RepositorySearchAPIServiceTests {
               "items": [
                 {
                   "full_name": "apple/swift",
+                  "description": "The Swift Programming Language",
                   "language": "C++",
                   "stargazers_count": 67000,
                   "watchers_count": 67001,
                   "forks_count": 10000,
                   "open_issues_count": 7000,
+                  "pushed_at": "2024-01-02T03:04:05Z",
                   "owner": { "avatar_url": "https://avatars.githubusercontent.com/u/10639145" }
                 },
                 {
@@ -51,6 +53,11 @@ struct RepositorySearchAPIServiceTests {
         #expect(repositories[0].stargazersCount == 67000)
         #expect(repositories[0].owner.avatarURLString == "https://avatars.githubusercontent.com/u/10639145")
         #expect(repositories[1].language == nil)
+        #expect(repositories[0].description == "The Swift Programming Language")
+        #expect(repositories[0].pushedAt == ISO8601DateFormatter().date(from: "2024-01-02T03:04:05Z"))
+        // 説明文・最終 push 日時が無いリポジトリもある
+        #expect(repositories[1].description == nil)
+        #expect(repositories[1].pushedAt == nil)
     }
 
     @Test("結果 0 件の場合は空配列を返す")
