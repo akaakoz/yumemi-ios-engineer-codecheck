@@ -122,8 +122,8 @@ struct RepositorySearchView: View {
         case .loading:
             ProgressView()
         case .idle where viewModel.repositories.isEmpty:
-            Text("GitHubのリポジトリを検索できるよー")
-                .foregroundStyle(.secondary)
+            // ブックマークが無いときの案内と同じ見た目にそろえる
+            ContentUnavailableView("GitHubのリポジトリを検索できるよー", systemImage: "magnifyingglass")
         case .loaded where viewModel.repositories.isEmpty:
             Text("該当するリポジトリがありません")
                 .foregroundStyle(.secondary)
