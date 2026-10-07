@@ -78,7 +78,7 @@ final class RepositorySearchViewModel {
 
         searchTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: keyword, page: 1)
+                let result = try await apiService.searchRepositories(keyword: keyword, sort: .bestMatch, page: 1)
                 // キャンセル済み = より新しい検索が始まっている、またはクリアされたので結果を反映しない
                 guard !Task.isCancelled else { return }
                 repositories = Self.removingDuplicates(result.repositories)
@@ -138,7 +138,7 @@ final class RepositorySearchViewModel {
         loadMorePhase = .loading
         loadMoreTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: page.keyword, page: page.page)
+                let result = try await apiService.searchRepositories(keyword: page.keyword, sort: .bestMatch, page: page.page)
                 // キャンセル済み = 新しい検索が始まっている、またはクリアされたので、前の検索の続きを反映しない
                 guard !Task.isCancelled else { return }
                 let existingIDs = Set(repositories.map(\.id))

@@ -12,13 +12,20 @@ struct RepositorySearchRequest: APIRequest {
     static let perPage = 30
 
     let keyword: String
+    let sort: RepositorySearchSort
     /// 1 始まりのページ番号
     let page: Int
 
     var path: String { "/search/repositories" }
     var queryItems: [URLQueryItem] {
-        [
-            URLQueryItem(name: "q", value: keyword),
+        var items = [URLQueryItem(name: "q", value: keyword)]
+        if let sortValue = sort.queryValue {
+            items += [
+                URLQueryItem(name: "sort", value: sortValue),
+                URLQueryItem(name: "order", value: "desc"),
+            ]
+        }
+        return items + [
             URLQueryItem(name: "per_page", value: String(Self.perPage)),
             URLQueryItem(name: "page", value: String(page)),
         ]
