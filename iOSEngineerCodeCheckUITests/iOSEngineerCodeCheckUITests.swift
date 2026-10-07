@@ -237,10 +237,9 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["リポジトリの情報を取得できませんでした。時間をおいて再度お試しください。"].waitForExistence(timeout: timeout))
         XCTAssertTrue(app.buttons["再読み込み"].exists)
-        // 取得に失敗してもリポジトリ名は表示する。ブックマークには取得した詳細を保存するため、追加はできない
+        // 取得に失敗してもリポジトリ名は表示する。ブックマークには取得した詳細を保存するため、追加のボタンは出さない
         XCTAssertTrue(app.staticTexts["apple/swift"].exists)
-        XCTAssertTrue(app.buttons["Add to Bookmark"].exists)
-        XCTAssertFalse(app.buttons["Add to Bookmark"].isEnabled)
+        XCTAssertFalse(app.buttons["Add to Bookmark"].exists)
         XCTAssertFalse(detailItem(app, "stars").exists)
     }
 

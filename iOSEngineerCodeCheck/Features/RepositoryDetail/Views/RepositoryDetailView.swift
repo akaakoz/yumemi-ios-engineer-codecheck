@@ -143,19 +143,19 @@ struct RepositoryDetailView: View {
         .accessibilityIdentifier("repositoryDetail.\(identifier)")
     }
 
+    /// 取得に失敗したときは、検索やブックマークの案内と同じ見た目で、取れる操作（再読み込み）をボタンとして示す
     private func failureView(_ error: APIError) -> some View {
-        VStack(spacing: 12) {
+        ContentUnavailableView {
+            Label("情報を取得できませんでした", systemImage: "exclamationmark.triangle")
+        } description: {
             Text(RepositoryDetailViewModel.failureMessage(for: error))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            reloadButton
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var reloadButton: some View {
-        Button("再読み込み") {
-            viewModel.reload()
+        } actions: {
+            Button {
+                viewModel.reload()
+            } label: {
+                Label("再読み込み", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -179,7 +179,10 @@ struct RepositoryDetailView: View {
     /// 保存に失敗した場合など、登録状態が変わらなければボタンの表示も変わらない。
     @ViewBuilder
     private var bookmarkButton: some View {
-        if viewModel.isBookmarked {
+        // ブックマークには取得した詳細を保存するため、詳細を表示できるまでは操作できるボタンとして見せない
+        if viewModel.loadedDetail == nil {
+            EmptyView()
+        } else if viewModel.isBookmarked {
             Button {
                 viewModel.removeBookmark()
             } label: {
@@ -199,7 +202,6 @@ struct RepositoryDetailView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .tint(.blue)
-            .disabled(viewModel.loadedDetail == nil)
         }
     }
 }
