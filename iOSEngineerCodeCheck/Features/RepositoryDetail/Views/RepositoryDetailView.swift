@@ -18,6 +18,8 @@ struct RepositoryDetailView: View {
             VStack(spacing: 28) {
                 detailContent
 
+                webPageLink
+
                 bookmarkButton
             }
             .padding(20)
@@ -124,6 +126,22 @@ struct RepositoryDetailView: View {
     private var reloadButton: some View {
         Button("再読み込み") {
             viewModel.reload()
+        }
+    }
+
+    /// 詳細を表示できたら、GitHub 上のページをアプリ内で開ける
+    @ViewBuilder
+    private var webPageLink: some View {
+        if let detail = viewModel.loadedDetail, let url = detail.webPageURL {
+            NavigationLink {
+                RepositoryWebPageView(url: url, title: detail.fullName)
+            } label: {
+                Label("GitHub で開く", systemImage: "safari")
+            }
+            // ブックマークのボタンと区別できるよう、ボタンではなく文字列のリンクとして表示する
+            .buttonStyle(.plain)
+            .foregroundStyle(.blue)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

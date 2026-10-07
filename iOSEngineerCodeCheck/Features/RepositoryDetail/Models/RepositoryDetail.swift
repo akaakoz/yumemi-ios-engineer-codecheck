@@ -29,6 +29,11 @@ struct RepositoryDetail: Codable, Hashable, Identifiable, Sendable {
 
     /// GitHub 上で一意な "owner/name" を識別子にする
     var id: String { fullName }
+
+    /// GitHub 上のリポジトリのページ。以前の形式のブックマークでも開けるよう、保存している値ではなくリポジトリ名から作る
+    var webPageURL: URL? {
+        URL(string: "https://github.com/\(fullName)")
+    }
 }
 
 extension RepositoryDetail {

@@ -183,6 +183,21 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Search"].isSelected)
     }
 
+    /// 詳細画面の「GitHub で開く」で、リポジトリのページをアプリ内の Web ページの画面で開ける
+    /// （ページの内容は実際の GitHub から読み込むため、画面が開くことだけを確かめる）
+    func testDetailOpensRepositoryWebPage() throws {
+        let app = try launchApp()
+        search(app, keyword: "swift")
+        repositoryRow(app, fullName: "apple/swift").tap()
+        let openButton = app.buttons["GitHub で開く"]
+        XCTAssertTrue(openButton.waitForExistence(timeout: timeout))
+
+        openButton.tap()
+
+        XCTAssertTrue(app.navigationBars["apple/swift"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: timeout))
+    }
+
     func testSearchWithNoResultsShowsNoResultsMessage() throws {
         let app = try launchApp(searchBehavior: .noResults)
 
