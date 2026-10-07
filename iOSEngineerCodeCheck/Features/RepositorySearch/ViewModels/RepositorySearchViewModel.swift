@@ -29,9 +29,10 @@ final class RepositorySearchViewModel {
         case failed(APIError)
     }
 
-    /// 次に読み込むページ。追加読み込みは、表示中の結果と同じキーワードで行う
+    /// 次に読み込むページ。追加読み込みは、表示中の結果と同じキーワード・並び順で行う
     private struct NextPage {
         let keyword: String
+        let sort: RepositorySearchSort
         let page: Int
     }
 
@@ -43,6 +44,8 @@ final class RepositorySearchViewModel {
         }
     }
     private(set) var phase = Phase.idle
+    /// 検索結果の並び順。アプリを終了しても覚えておく
+    private(set) var sort: RepositorySearchSort
     private(set) var loadMorePhase = LoadMorePhase.idle
     /// 直近に成功した検索の結果（読み込んだページを順に連結し、同じリポジトリは 1 件にまとめたもの）。
     /// 新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
@@ -61,10 +64,16 @@ final class RepositorySearchViewModel {
     }
 
     private let apiService: RepositorySearchAPIServiceProtocol
+    private let sortStorage: RepositorySearchSortStorageProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositorySearch")
 
-    init(apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService()) {
+    init(
+        apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService(),
+        sortStorage: RepositorySearchSortStorageProtocol = UserDefaultsRepositorySearchSortStorage()
+    ) {
         self.apiService = apiService
+        self.sortStorage = sortStorage
+        sort = sortStorage.loadSort()
     }
 
     func search() {
@@ -75,14 +84,15 @@ final class RepositorySearchViewModel {
 
         cancelLoading()
         phase = .loading
+        let sort = sort
 
         searchTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: keyword, sort: .bestMatch, page: 1)
+                let result = try await apiService.searchRepositories(keyword: keyword, sort: sort, page: 1)
                 // キャンセル済み = より新しい検索が始まっている、またはクリアされたので結果を反映しない
                 guard !Task.isCancelled else { return }
                 repositories = Self.removingDuplicates(result.repositories)
-                nextPage = result.hasNextPage ? NextPage(keyword: keyword, page: 2) : nil
+                nextPage = result.hasNextPage ? NextPage(keyword: keyword, sort: sort, page: 2) : nil
                 phase = .loaded
             } catch {
                 guard !Task.isCancelled else { return }
@@ -91,6 +101,19 @@ final class RepositorySearchViewModel {
                 repositories = []
                 phase = .failed(error)
             }
+        }
+    }
+
+    /// 並び順を変えて保存する。検索したことがあれば、検索欄の今のキーワードで 1 ページ目から検索し直す。
+    /// まだ検索していない場合は、次の検索から使う。
+    func changeSort(to newSort: RepositorySearchSort) {
+        guard newSort != sort else {
+            return
+        }
+        sort = newSort
+        sortStorage.saveSort(newSort)
+        if phase != .idle {
+            search()
         }
     }
 
@@ -138,13 +161,13 @@ final class RepositorySearchViewModel {
         loadMorePhase = .loading
         loadMoreTask = Task {
             do throws(APIError) {
-                let result = try await apiService.searchRepositories(keyword: page.keyword, sort: .bestMatch, page: page.page)
+                let result = try await apiService.searchRepositories(keyword: page.keyword, sort: page.sort, page: page.page)
                 // キャンセル済み = 新しい検索が始まっている、またはクリアされたので、前の検索の続きを反映しない
                 guard !Task.isCancelled else { return }
                 let existingIDs = Set(repositories.map(\.id))
                 // 検索結果の順位は読み込みの間にも変わるため、前のページで表示したリポジトリが再び含まれることがある
                 repositories += Self.removingDuplicates(result.repositories).filter { !existingIDs.contains($0.id) }
-                nextPage = result.hasNextPage ? NextPage(keyword: page.keyword, page: page.page + 1) : nil
+                nextPage = result.hasNextPage ? NextPage(keyword: page.keyword, sort: page.sort, page: page.page + 1) : nil
                 loadMorePhase = .idle
             } catch {
                 guard !Task.isCancelled else { return }
