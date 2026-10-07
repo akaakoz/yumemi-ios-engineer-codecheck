@@ -20,6 +20,9 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         /// ブックマークの保存先を切り替える UserDefaults のキー
         /// （アプリ側の `UserDefaultsBookmarkStorage.suiteNameOverrideKey` と同じ値）
         static let bookmarkStorageSuiteNameKey = "-BookmarkStorageSuiteName"
+        /// 検索結果の並び順を保存する UserDefaults のキー（アプリ側の `UserDefaultsRepositorySearchSortStorage.storageKey`）。
+        /// 起動引数で指定した値は、保存している値より優先して読まれる
+        static let searchSortKey = "-RepositorySearchSort"
         /// 数値の書式などが端末の言語設定で変わらないよう、ロケールを固定する
         static let fixedLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
@@ -204,6 +207,31 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(app.buttons["次のページ"].isEnabled)
     }
 
+    /// 並び順を変えると検索し直して結果の順が変わり、アプリを起動し直しても選んだ並び順を覚えている
+    func testChangingSortReordersResultsAndIsRemembered() throws {
+        let app = try launchApp()
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "apple/swift").waitForExistence(timeout: timeout))
+        XCTAssertTrue(isRow(repositoryRow(app, fullName: "apple/swift"), above: repositoryRow(app, fullName: "yumemi/sample")))
+
+        // モックサーバーは、最近更新された順では結果の順を逆にして返す
+        selectSort(app, "最近更新された順")
+        waitUntilRow(repositoryRow(app, fullName: "yumemi/sample"), isAbove: repositoryRow(app, fullName: "apple/swift"))
+        XCTAssertEqual(app.buttons["repositorySearch.sortMenu"].value as? String, "最近更新された順")
+
+        // 並び順を指定せずに起動し直すと、保存している並び順で検索する
+        terminate(app)
+        let relaunchedApp = try launchApp(searchSort: nil)
+        XCTAssertEqual(relaunchedApp.buttons["repositorySearch.sortMenu"].value as? String, "最近更新された順")
+        search(relaunchedApp, keyword: "swift")
+        XCTAssertTrue(repositoryRow(relaunchedApp, fullName: "yumemi/sample").waitForExistence(timeout: timeout))
+        XCTAssertTrue(isRow(repositoryRow(relaunchedApp, fullName: "yumemi/sample"), above: repositoryRow(relaunchedApp, fullName: "apple/swift")))
+
+        // 端末に保存した並び順を、既定のおすすめ順に戻しておく
+        selectSort(relaunchedApp, "おすすめ順")
+        waitUntilRow(repositoryRow(relaunchedApp, fullName: "apple/swift"), isAbove: repositoryRow(relaunchedApp, fullName: "yumemi/sample"))
+    }
+
     func testSearchWithNoResultsShowsNoResultsMessage() throws {
         let app = try launchApp(searchBehavior: .noResults)
 
@@ -350,18 +378,23 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     }
 
     /// モックサーバーを起動し、そこへ接続するようにアプリを起動する。サーバーはテスト終了時に止める。
-    /// - Parameter bookmarkStorageSuiteName: ブックマークの保存先。起動し直しても同じ保存先を使いたい場合に指定する
+    /// - Parameters:
+    ///   - bookmarkStorageSuiteName: ブックマークの保存先。起動し直しても同じ保存先を使いたい場合に指定する
+    ///   - searchSort: 検索結果の並び順。既定ではおすすめ順で始め、前のテストで選んだ並び順に依存しない。
+    ///     `nil` の場合は指定せず、端末に保存している並び順を使う
     private func launchApp(
         searchBehavior: MockGitHubServer.Behavior = .success,
-        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
+        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)",
+        searchSort: String? = "bestMatch"
     ) throws -> XCUIApplication {
-        try launchAppWithServer(searchBehavior: searchBehavior, bookmarkStorageSuiteName: bookmarkStorageSuiteName).app
+        try launchAppWithServer(searchBehavior: searchBehavior, bookmarkStorageSuiteName: bookmarkStorageSuiteName, searchSort: searchSort).app
     }
 
     /// `launchApp` と同じ。テストからモックサーバーの応答の時機を決める場合に使う
     private func launchAppWithServer(
         searchBehavior: MockGitHubServer.Behavior = .success,
-        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
+        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)",
+        searchSort: String? = "bestMatch"
     ) throws -> (app: XCUIApplication, server: MockGitHubServer) {
         let server = try MockGitHubServer(behavior: searchBehavior)
         let baseURL = try server.start(testCase: self)
@@ -373,6 +406,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         // 既定ではテストごとに新しい領域を使い、端末に保存済みのブックマークや他のテストの結果に依存しない
         app.launchArguments = [LaunchOption.apiBaseURLKey, baseURL]
             + [LaunchOption.bookmarkStorageSuiteNameKey, bookmarkStorageSuiteName]
+            + (searchSort.map { [LaunchOption.searchSortKey, $0] } ?? [])
             + LaunchOption.fixedLocale
         app.launch()
         return (app, server)
@@ -393,6 +427,28 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(element.exists, "\(maxSwipes) 回スワイプしても \(element) が現れませんでした")
+    }
+
+    private func selectSort(_ app: XCUIApplication, _ title: String) {
+        app.buttons["repositorySearch.sortMenu"].tap()
+        let option = app.buttons[title]
+        XCTAssertTrue(option.waitForExistence(timeout: timeout))
+        option.tap()
+    }
+
+    /// 2 つの行がどちらも表示されていて、`row` が `other` より上にあるか
+    private func isRow(_ row: XCUIElement, above other: XCUIElement) -> Bool {
+        Self.isRow(row, above: other)
+    }
+
+    private static func isRow(_ row: XCUIElement, above other: XCUIElement) -> Bool {
+        row.exists && other.exists && row.frame.minY < other.frame.minY
+    }
+
+    /// `row` が `other` より上に表示されるまで待つ。並び順を変えた後に、検索し直した結果が出るのを待つために使う
+    private func waitUntilRow(_ row: XCUIElement, isAbove other: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let reordered = expectation(for: NSPredicate { _, _ in Self.isRow(row, above: other) }, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reordered], timeout: timeout), .completed, "\(row) が \(other) より上に表示されませんでした", file: file, line: line)
     }
 
     /// 要素が消えるのを待つ。消えたら true
