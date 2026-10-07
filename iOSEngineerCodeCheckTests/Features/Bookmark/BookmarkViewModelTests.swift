@@ -16,7 +16,7 @@ struct BookmarkViewModelTests {
     @Test("生成しただけでは読み込まず、loadBookmarks で保存済みのブックマークを読み込む")
     func loadsSavedBookmarks() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
 
         #expect(viewModel.bookmarks.isEmpty)
 
@@ -29,7 +29,7 @@ struct BookmarkViewModelTests {
     @Test("読み込み直すと、Search タブで追加・削除された内容を反映する")
     func reloadReflectsStorageChanges() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         // Search タブでの追加・削除を想定して、保存先を直接書き換える
@@ -42,7 +42,7 @@ struct BookmarkViewModelTests {
     @Test("保存データを読み込めない場合は空にし、失敗を storageError として公開する")
     func exposesLoadFailure() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         storage.loadError = .loadFailed(description: "broken")
@@ -57,7 +57,7 @@ struct BookmarkViewModelTests {
     @Test("削除すると一覧から消え、保存される")
     func removeDeletesAndSaves() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         viewModel.removeBookmark(fullName: "a/one")
@@ -70,7 +70,7 @@ struct BookmarkViewModelTests {
     @Test("削除した後に追加し直すと、末尾に再登録されて保存される")
     func reAddAppendsToEnd() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         viewModel.removeBookmark(fullName: "a/one")
@@ -84,7 +84,7 @@ struct BookmarkViewModelTests {
     @Test("削除した内容は、読み込み直しても戻らない")
     func removalSurvivesReload() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         viewModel.removeBookmark(fullName: "a/one")
 
@@ -96,7 +96,7 @@ struct BookmarkViewModelTests {
     @Test("登録状態が変わらない操作では保存しない")
     func noOpOperationDoesNotSave() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         viewModel.addBookmark(.fixture(fullName: "a/one"))
@@ -108,7 +108,7 @@ struct BookmarkViewModelTests {
     @Test("一覧を読み込んだ後に Search タブで追加されたブックマークは、削除しても残る")
     func removeKeepsBookmarkAddedFromSearchTab() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         // 詳細画面を開いている間に、Search タブで追加されたことを想定して保存先を直接書き換える
         try storage.saveBookmarks([.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
@@ -122,7 +122,7 @@ struct BookmarkViewModelTests {
     @Test("一覧を読み込んだ後に Search タブで追加されたブックマークは、再登録しても残る")
     func reAddKeepsBookmarkAddedFromSearchTab() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         viewModel.removeBookmark(fullName: "a/one")
         try storage.saveBookmarks([.fixture(fullName: "b/two")])
@@ -136,7 +136,7 @@ struct BookmarkViewModelTests {
     @Test("Search タブで追加済みのブックマークを再登録しても、重複して保存しない")
     func reAddDoesNotDuplicateBookmarkAddedFromSearchTab() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         viewModel.removeBookmark(fullName: "a/one")
         try storage.saveBookmarks([.fixture(fullName: "a/one")])
@@ -152,7 +152,7 @@ struct BookmarkViewModelTests {
     @Test("Search タブで削除済みのブックマークを削除しても保存せず、一覧を保存先に合わせる")
     func removeOfBookmarkRemovedFromSearchTabOnlyRefreshesList() throws {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one"), .fixture(fullName: "b/two")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         try storage.saveBookmarks([.fixture(fullName: "b/two")])
         let saveCountBeforeRemove = storage.saveCallCount
@@ -166,7 +166,7 @@ struct BookmarkViewModelTests {
     @Test("追加・削除の前に保存先を読み込めない場合は保存せず、失敗を storageError として公開する")
     func operationDoesNotSaveWhenLoadFails() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         storage.loadError = .loadFailed(description: "broken")
 
@@ -181,7 +181,7 @@ struct BookmarkViewModelTests {
     func removeKeepsListWhenSaveFails() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         storage.saveError = .saveFailed(description: "disk full")
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
 
         viewModel.removeBookmark(fullName: "a/one")
@@ -194,7 +194,7 @@ struct BookmarkViewModelTests {
     @Test("再登録の保存に失敗した場合は一覧を変えず、失敗を公開する")
     func reAddKeepsListWhenSaveFails() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         viewModel.removeBookmark(fullName: "a/one")
         storage.saveError = .saveFailed(description: "disk full")
@@ -210,7 +210,7 @@ struct BookmarkViewModelTests {
     func listIsConsistentAfterReloadFollowingSaveFailure() {
         let storage = InMemoryBookmarkStorage(savedBookmarks: [.fixture(fullName: "a/one")])
         storage.saveError = .saveFailed(description: "disk full")
-        let viewModel = BookmarkViewModel(storage: storage)
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: storage))
         viewModel.loadBookmarks()
         viewModel.removeBookmark(fullName: "a/one")
         let listBeforeReload = viewModel.bookmarks
@@ -223,7 +223,7 @@ struct BookmarkViewModelTests {
     // MARK: - 失敗の表示
     @Test("失敗の表示を閉じると storageError がクリアされる")
     func dismissingErrorClearsIt() {
-        let viewModel = BookmarkViewModel(storage: InMemoryBookmarkStorage(loadError: .loadFailed(description: "broken")))
+        let viewModel = BookmarkViewModel(bookmarkService: BookmarkService(storage: InMemoryBookmarkStorage(loadError: .loadFailed(description: "broken"))))
         viewModel.loadBookmarks()
         #expect(viewModel.isShowingStorageError)
 

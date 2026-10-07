@@ -29,7 +29,8 @@ struct RepositoryDetailViewModelTests {
             apiService: RepositoryDetailAPIService(apiClient: apiClient)
         )
 
-        await viewModel.loadRepositoryDetail()
+        viewModel.loadIfNeeded()
+        await viewModel.loadTask?.value
 
         #expect(viewModel.phase == .loaded(.fixture(subscribersCount: 2400)))
         #expect(await apiClient.requestedKeys == ["/repos/apple/swift"])
@@ -42,9 +43,75 @@ struct RepositoryDetailViewModelTests {
             apiService: makeAPIService(result: .failure(.httpStatus(500)))
         )
 
-        await viewModel.loadRepositoryDetail()
+        viewModel.loadIfNeeded()
+        await viewModel.loadTask?.value
 
         #expect(viewModel.phase == .failed(.httpStatus(500)))
+    }
+
+    @Test("取得中に画面が表示し直されても、重ねて取得しない")
+    func loadIfNeededDoesNotFetchTwiceWhileLoading() async {
+        let apiClient = StubAPIClient()
+        let request = RepositoryDetailRequest(fullName: "apple/swift")
+        let viewModel = RepositoryDetailViewModel(source: .remote(fullName: "apple/swift"), apiService: RepositoryDetailAPIService(apiClient: apiClient))
+        viewModel.loadIfNeeded()
+        await apiClient.waitForRequest(request)
+
+        viewModel.loadIfNeeded()
+        await apiClient.respond(to: request, with: .success(.fixture()))
+        await viewModel.loadTask?.value
+
+        #expect(viewModel.phase == .loaded(.fixture()))
+        #expect(await apiClient.requestedKeys == ["/repos/apple/swift"])
+    }
+
+    @Test("表示できた後に画面が表示し直されても、取得し直さず表示中の詳細を残す")
+    func loadIfNeededKeepsLoadedDetail() async {
+        let apiClient = StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: .success(.fixture()))
+        let viewModel = RepositoryDetailViewModel(source: .remote(fullName: "apple/swift"), apiService: RepositoryDetailAPIService(apiClient: apiClient))
+        viewModel.loadIfNeeded()
+        await viewModel.loadTask?.value
+
+        viewModel.loadIfNeeded()
+
+        #expect(viewModel.phase == .loaded(.fixture()))
+        #expect(await apiClient.requestedKeys == ["/repos/apple/swift"])
+    }
+
+    @Test("失敗した後は自動では取得し直さず、再読み込みで取得し直せる")
+    func reloadAfterFailure() async {
+        let apiClient = StubAPIClient()
+        let request = RepositoryDetailRequest(fullName: "apple/swift")
+        let viewModel = RepositoryDetailViewModel(source: .remote(fullName: "apple/swift"), apiService: RepositoryDetailAPIService(apiClient: apiClient))
+        viewModel.loadIfNeeded()
+        await apiClient.waitForRequest(request)
+        await apiClient.respond(to: request, with: .failure(.network(.notConnectedToInternet)))
+        await viewModel.loadTask?.value
+
+        viewModel.loadIfNeeded()
+        #expect(viewModel.phase == .failed(.network(.notConnectedToInternet)))
+        #expect(await apiClient.requestedKeys.count == 1)
+
+        viewModel.reload()
+        #expect(viewModel.phase == .loading)
+        await apiClient.waitForRequest(request)
+        await apiClient.respond(to: request, with: .success(.fixture()))
+        await viewModel.loadTask?.value
+
+        #expect(viewModel.phase == .loaded(.fixture()))
+    }
+
+    @Test("失敗していないときに再読み込みしても、取得しない")
+    func reloadDoesNothingUnlessFailed() async {
+        let apiClient = StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: .success(.fixture()))
+        let viewModel = RepositoryDetailViewModel(source: .remote(fullName: "apple/swift"), apiService: RepositoryDetailAPIService(apiClient: apiClient))
+        viewModel.loadIfNeeded()
+        await viewModel.loadTask?.value
+
+        viewModel.reload()
+
+        #expect(viewModel.phase == .loaded(.fixture()))
+        #expect(await apiClient.requestedKeys.count == 1)
     }
 
     // MARK: - ブックマークから開いた場合
@@ -68,7 +135,8 @@ struct RepositoryDetailViewModelTests {
         let apiClient = StubAPIClient(stubbing: RepositoryDetailRequest(fullName: "apple/swift"), with: .success(.fixture(stargazersCount: 999)))
         let viewModel = RepositoryDetailViewModel(source: .saved(saved), apiService: RepositoryDetailAPIService(apiClient: apiClient))
 
-        await viewModel.loadRepositoryDetail()
+        viewModel.loadIfNeeded()
+        await viewModel.loadTask?.value
 
         #expect(viewModel.phase == .loaded(saved))
         #expect(await apiClient.requestedKeys.isEmpty)

@@ -38,8 +38,8 @@ struct RepositoryDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.loadRepositoryDetail()
+        .onAppear {
+            viewModel.loadIfNeeded()
         }
     }
 
@@ -126,9 +126,7 @@ struct RepositoryDetailView: View {
 
     private var reloadButton: some View {
         Button("再読み込み") {
-            Task {
-                await viewModel.loadRepositoryDetail()
-            }
+            viewModel.reload()
         }
     }
 

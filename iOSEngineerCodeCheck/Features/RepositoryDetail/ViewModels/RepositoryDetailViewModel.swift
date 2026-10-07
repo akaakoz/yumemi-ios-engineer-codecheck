@@ -40,6 +40,9 @@ final class RepositoryDetailViewModel {
     /// "owner/name" の形式のリポジトリ名。詳細を表示できるまでのタイトルに使う
     let fullName: String
 
+    /// 実行中の取得。画面が表示し直されても、重ねて取得しない
+    @ObservationIgnored private(set) var loadTask: Task<Void, Never>?
+
     private let source: Source
     private let apiService: RepositoryDetailAPIServiceProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositoryDetail")
@@ -57,20 +60,21 @@ final class RepositoryDetailViewModel {
         }
     }
 
-    /// Search タブから開いた場合だけ、リポジトリ API から詳細を取得する。
-    func loadRepositoryDetail() async {
-        guard case .remote = source else {
+    /// 画面が表示されたときに呼ぶ。Search タブから開いた場合に、まだ取得していなければリポジトリ API から詳細を取得する。
+    /// 取得中・表示済み・失敗後（`reload()` を待つ）は何もしない。
+    func loadIfNeeded() {
+        guard case .remote = source, phase == .loading, loadTask == nil else {
             return
         }
-        phase = .loading
-        do throws(APIError) {
-            phase = .loaded(try await apiService.fetchRepositoryDetail(fullName: fullName))
-        } catch {
-            // 画面を閉じてキャンセルされた場合は、失敗として扱わない
-            guard !Task.isCancelled else { return }
-            logger.error("Failed to fetch repository detail: \(String(describing: error), privacy: .public)")
-            phase = .failed(error)
+        load()
+    }
+
+    /// 取得に失敗した詳細を、もう一度取得する。
+    func reload() {
+        guard case .failed = phase else {
+            return
         }
+        load()
     }
 
     /// 取得に失敗したときに画面に表示する文言。原因に応じて、利用者が取れる対応が分かるようにする。
@@ -85,6 +89,19 @@ final class RepositoryDetailViewModel {
             return "リポジトリが見つかりませんでした。削除されたか、非公開になった可能性があります。"
         case .network, .httpStatus, .decoding, .invalidResponse, .invalidRequest, .unexpected:
             return "リポジトリの情報を取得できませんでした。時間をおいて再度お試しください。"
+        }
+    }
+
+    // MARK: - Private
+    private func load() {
+        phase = .loading
+        loadTask = Task {
+            do throws(APIError) {
+                phase = .loaded(try await apiService.fetchRepositoryDetail(fullName: fullName))
+            } catch {
+                logger.error("Failed to fetch repository detail: \(String(describing: error), privacy: .public)")
+                phase = .failed(error)
+            }
         }
     }
 }

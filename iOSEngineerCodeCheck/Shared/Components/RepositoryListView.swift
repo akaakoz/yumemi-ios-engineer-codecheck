@@ -14,13 +14,20 @@ protocol RepositoryListItem: Hashable, Identifiable {
 extension Repository: RepositoryListItem {}
 
 /// 値で遷移するため、詳細表示中に元の一覧から項目が消えても詳細画面は閉じない。
-struct RepositoryListView<Item: RepositoryListItem>: View {
+struct RepositoryListView<Item: RepositoryListItem, Footer: View>: View {
 
     let items: [Item]
+    /// 一覧の一番下に表示する内容（追加読み込みの状態など）
+    let footer: Footer
+
+    init(items: [Item], @ViewBuilder footer: () -> Footer) {
+        self.items = items
+        self.footer = footer()
+    }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(items) { item in
                     NavigationLink(value: item) {
                         RepositoryRow(fullName: item.fullName, language: item.language)
@@ -28,7 +35,17 @@ struct RepositoryListView<Item: RepositoryListItem>: View {
                     .accessibilityIdentifier("repositoryRow.\(item.fullName)")
                     Divider()
                 }
+                footer
             }
+        }
+    }
+}
+
+extension RepositoryListView where Footer == EmptyView {
+    /// 一番下に何も表示せず、追加読み込みもしない一覧（ブックマークなど）
+    init(items: [Item]) {
+        self.init(items: items) {
+            EmptyView()
         }
     }
 }

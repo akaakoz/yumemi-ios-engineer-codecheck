@@ -224,12 +224,88 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertFalse(app.activityIndicators.firstMatch.exists)
     }
 
+    // MARK: - 追加読み込み
+
+    /// 一番下までスクロールすると下部にローディングが出て次のページを読み込み、最後のページまで読み込むと消える
+    func testScrollingToBottomLoadsNextPage() throws {
+        let (app, server) = try launchAppWithServer(searchBehavior: .paginated)
+        let loadMoreIndicator = loadMoreIndicator(app)
+        let lastRow = repositoryRow(app, fullName: "paged/repo31")
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+        // 1 ページ目の途中では、下部のローディングは出ない
+        XCTAssertFalse(loadMoreIndicator.exists)
+
+        // モックサーバーが 2 ページ目を返すまで、下部のローディングが出たままになる
+        scrollUntilExists(loadMoreIndicator, in: app)
+        XCTAssertFalse(lastRow.exists)
+
+        server.releaseNextPageResponse()
+
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
+        XCTAssertTrue(waitForNonExistence(of: loadMoreIndicator))
+    }
+
+    /// 追加読み込みに失敗しても、それまでの結果を残したまま、下部の「再試行」で読み込み直せる
+    func testLoadMoreFailureKeepsResultsAndCanRetry() throws {
+        let app = try launchApp(searchBehavior: .paginatedNextPageFailsOnce)
+        let retryButton = app.buttons["再試行"]
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+
+        scrollUntilExists(retryButton, in: app)
+
+        XCTAssertTrue(app.staticTexts["GitHub で問題が発生しています。時間をおいて再度お試しください。"].exists)
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
+
+        tapWhenEnabled(retryButton)
+
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
+        XCTAssertFalse(retryButton.exists)
+    }
+
+    /// 一番下を表示したまま検索し直すと、新しい結果を一番上から 1 ページ目だけ表示し、一番下までスクロールすると続きを読み込める
+    func testSearchingAgainWhileScrolledToBottomStillLoadsNextPage() throws {
+        let (app, server) = try launchAppWithServer(searchBehavior: .paginated)
+        let field = app.textFields["repositorySearch.field"]
+        let lastRow = repositoryRow(app, fullName: "paged/repo31")
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
+        scrollUntilExists(loadMoreIndicator(app), in: app)
+        server.releaseNextPageResponse()
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
+
+        // 入力はそのままで、もう一度検索する。一番上に戻り、1 ページ目だけの結果になる
+        field.tap()
+        field.typeText("\n")
+        XCTAssertTrue(waitForNonExistence(of: lastRow))
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").isHittable)
+        XCTAssertFalse(loadMoreIndicator(app).exists)
+
+        // 一番下まで行っても、2 ページ目が返るまでは新しい 1 ページ目の 30 件だけが並ぶ
+        scrollUntilExists(loadMoreIndicator(app), in: app)
+        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
+        XCTAssertFalse(lastRow.exists)
+
+        // 新しい結果の続き（2 ページ目）を読み込む
+        server.releaseNextPageResponse()
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
+    }
+
     /// モックサーバーを起動し、そこへ接続するようにアプリを起動する。サーバーはテスト終了時に止める。
     /// - Parameter bookmarkStorageSuiteName: ブックマークの保存先。起動し直しても同じ保存先を使いたい場合に指定する
     private func launchApp(
         searchBehavior: MockGitHubServer.Behavior = .success,
         bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
     ) throws -> XCUIApplication {
+        try launchAppWithServer(searchBehavior: searchBehavior, bookmarkStorageSuiteName: bookmarkStorageSuiteName).app
+    }
+
+    /// `launchApp` と同じ。テストからモックサーバーの応答の時機を決める場合に使う
+    private func launchAppWithServer(
+        searchBehavior: MockGitHubServer.Behavior = .success,
+        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
+    ) throws -> (app: XCUIApplication, server: MockGitHubServer) {
         let server = try MockGitHubServer(behavior: searchBehavior)
         let baseURL = try server.start(testCase: self)
         addTeardownBlock {
@@ -242,7 +318,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
             + [LaunchOption.bookmarkStorageSuiteNameKey, bookmarkStorageSuiteName]
             + LaunchOption.fixedLocale
         app.launch()
-        return app
+        return (app, server)
     }
 
     /// アプリを終了し、終了しきったことを確かめる。
@@ -250,6 +326,27 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     private func terminate(_ app: XCUIApplication) {
         app.terminate()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: timeout), "アプリが終了しませんでした")
+    }
+
+    /// 要素が現れるまで、一覧を上にスワイプする。一覧の行は画面に入る直前に作られるため、スクロールしないと現れない
+    private func scrollUntilExists(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 15) {
+        var swipes = 0
+        while !element.exists && swipes < maxSwipes {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(element.exists, "\(maxSwipes) 回スワイプしても \(element) が現れませんでした")
+    }
+
+    /// 要素が消えるのを待つ。消えたら true
+    private func waitForNonExistence(of element: XCUIElement) -> Bool {
+        let disappeared = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [disappeared], timeout: timeout) == .completed
+    }
+
+    /// 検索結果の一覧の下部に、続きのページがある間・読み込み中に表示するローディング
+    private func loadMoreIndicator(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["repositorySearch.loadMoreIndicator"]
     }
 
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {
