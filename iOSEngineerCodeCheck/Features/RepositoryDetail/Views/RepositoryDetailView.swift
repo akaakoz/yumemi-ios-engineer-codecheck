@@ -87,11 +87,23 @@ struct RepositoryDetailView: View {
 
     private func summaryView(_ detail: RepositoryDetail) -> some View {
         VStack(spacing: 16) {
+            if let description = detail.description, !description.isEmpty {
+                Text(description)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if let language = detail.language {
                 Text("Written in \(language)")
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let pushedAt = detail.pushedAt {
+                Label(pushedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 

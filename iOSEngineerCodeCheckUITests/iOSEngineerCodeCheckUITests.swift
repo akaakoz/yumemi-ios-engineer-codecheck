@@ -48,6 +48,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         resultRow.tap()
 
         XCTAssertTrue(app.staticTexts["Written in C++"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["The Swift Programming Language"].exists)
         XCTAssertTrue(app.staticTexts["67,000 stars"].exists)
         // 詳細はリポジトリ API の値で表示する。Watch 数は検索結果の watchers_count（Star 数と同じ値）ではなく subscribers_count
         XCTAssertTrue(app.staticTexts["2,400 watchers"].waitForExistence(timeout: timeout))
