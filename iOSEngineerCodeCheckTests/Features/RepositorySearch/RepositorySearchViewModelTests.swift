@@ -12,9 +12,11 @@ import Testing
 struct RepositorySearchViewModelTests {
 
     private let apiClient = StubAPIClient()
+    /// 端末の UserDefaults を使わないよう、並び順はインメモリの保存先に読み書きする
+    private let sortStorage = InMemoryRepositorySearchSortStorage()
 
     private func makeViewModel() -> RepositorySearchViewModel {
-        RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient))
+        RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), sortStorage: sortStorage)
     }
 
     /// 指定した検索結果を表示している状態にする
@@ -227,6 +229,111 @@ struct RepositorySearchViewModelTests {
     )
     func failureMessageDependsOnError(error: APIError, expectedMessage: String) {
         #expect(RepositorySearchViewModel.failureMessage(for: error) == expectedMessage)
+    }
+
+    // MARK: - 並び順
+
+    @Test("保存している並び順で始まり、その並び順で検索する")
+    func searchUsesSavedSort() async {
+        let sortStorage = InMemoryRepositorySearchSortStorage(savedSort: .stars)
+        let viewModel = RepositorySearchViewModel(apiService: RepositorySearchAPIService(apiClient: apiClient), sortStorage: sortStorage)
+        #expect(viewModel.sort == .stars)
+
+        viewModel.query = "swift"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "swift", sort: .stars)
+        await apiClient.respond(to: "swift", sort: .stars, with: .success([.fixture(fullName: "a/one")]))
+        await viewModel.searchTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one"])
+    }
+
+    @Test("まだ検索していないときに並び順を変えると、保存して次の検索から使い、検索はしない")
+    func changeSortBeforeSearchOnlySaves() async {
+        let viewModel = makeViewModel()
+
+        viewModel.changeSort(to: .updated)
+
+        #expect(viewModel.sort == .updated)
+        #expect(sortStorage.savedSort == .updated)
+        #expect(viewModel.searchTask == nil)
+        #expect(viewModel.phase == .idle)
+        #expect(await apiClient.requestedKeys.isEmpty)
+    }
+
+    @Test("検索結果を表示しているときに並び順を変えると、検索欄の今のキーワードで 1 ページ目から検索し直す")
+    func changeSortAfterSearchSearchesAgainWithCurrentQuery() async {
+        let viewModel = makeViewModel()
+        viewModel.query = "swift"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "swift")
+        await apiClient.respond(to: "swift", totalCount: 100, with: .success([.fixture(fullName: "a/relevant")]))
+        await viewModel.searchTask?.value
+        // 検索欄の文字を書き換え、まだ検索していない
+        viewModel.query = "kotlin"
+
+        viewModel.changeSort(to: .stars)
+
+        #expect(viewModel.phase == .loading)
+        #expect(sortStorage.savedSort == .stars)
+        await apiClient.waitForRequest(keyword: "kotlin", sort: .stars)
+        await apiClient.respond(to: "kotlin", sort: .stars, totalCount: 100, with: .success([.fixture(fullName: "k/popular")]))
+        await viewModel.searchTask?.value
+
+        #expect(viewModel.phase == .loaded)
+        #expect(viewModel.repositories.map(\.fullName) == ["k/popular"])
+    }
+
+    @Test("同じ並び順を選んでも、検索し直さない")
+    func changeSortToSameDoesNothing() async {
+        let viewModel = makeViewModel()
+        viewModel.query = "swift"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "swift")
+        await apiClient.respond(to: "swift", with: .success([.fixture(fullName: "a/one")]))
+        await viewModel.searchTask?.value
+        let requestCount = await apiClient.requestedKeys.count
+
+        viewModel.changeSort(to: .bestMatch)
+
+        #expect(await apiClient.requestedKeys.count == requestCount)
+        #expect(viewModel.phase == .loaded)
+    }
+
+    @Test("並び順を変えた後に前の並び順の応答が返っても、新しい並び順の結果を上書きしない")
+    func outdatedSortResponseIsIgnored() async {
+        let viewModel = makeViewModel()
+        viewModel.query = "swift"
+        viewModel.search()
+        let oldTask = viewModel.searchTask
+        await apiClient.waitForRequest(keyword: "swift")
+
+        viewModel.changeSort(to: .updated)
+        await apiClient.waitForRequest(keyword: "swift", sort: .updated)
+        await apiClient.respond(to: "swift", sort: .updated, with: .success([.fixture(fullName: "a/recent")]))
+        await viewModel.searchTask?.value
+        await apiClient.respond(to: "swift", with: .success([.fixture(fullName: "a/relevant")]))
+        await oldTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["a/recent"])
+    }
+
+    @Test("追加読み込みは、表示中の結果と同じ並び順で読む")
+    func loadMoreUsesSortOfDisplayedResults() async {
+        let viewModel = makeViewModel()
+        viewModel.changeSort(to: .stars)
+        viewModel.query = "swift"
+        viewModel.search()
+        await apiClient.waitForRequest(keyword: "swift", sort: .stars)
+        await apiClient.respond(to: "swift", sort: .stars, totalCount: 100, with: .success([.fixture(fullName: "a/one")]))
+        await viewModel.searchTask?.value
+
+        viewModel.loadMoreIfNeeded()
+        await apiClient.waitForRequest(keyword: "swift", sort: .stars, page: 2)
+        await apiClient.respond(to: "swift", sort: .stars, page: 2, totalCount: 100, with: .success([.fixture(fullName: "b/two")]))
+        await viewModel.loadMoreTask?.value
+
+        #expect(viewModel.repositories.map(\.fullName) == ["a/one", "b/two"])
     }
 
     // MARK: - 追加読み込み
@@ -457,21 +564,27 @@ struct RepositorySearchViewModelTests {
 
 /// 検索のリクエストを、キーワードで待機・応答できるようにする
 private extension StubAPIClient {
-    func waitForRequest(keyword: String, page: Int = 1) async {
-        await waitForRequest(RepositorySearchRequest(keyword: keyword, page: page))
+    func waitForRequest(keyword: String, sort: RepositorySearchSort = .bestMatch, page: Int = 1) async {
+        await waitForRequest(RepositorySearchRequest(keyword: keyword, sort: sort, page: page))
     }
 
     /// - Parameter totalCount: 全件数。省略した場合は、このページの件数（次のページなし）
-    func respond(to keyword: String, page: Int = 1, totalCount: Int? = nil, with result: Result<[Repository], APIError>) {
+    func respond(
+        to keyword: String,
+        sort: RepositorySearchSort = .bestMatch,
+        page: Int = 1,
+        totalCount: Int? = nil,
+        with result: Result<[Repository], APIError>
+    ) {
         respond(
-            to: RepositorySearchRequest(keyword: keyword, page: page),
+            to: RepositorySearchRequest(keyword: keyword, sort: sort, page: page),
             with: result.map { RepositorySearchResponse(totalCount: totalCount ?? $0.count, items: $0) }
         )
     }
 
     /// 検索リクエストのキーワードを、受け取った順に並べたもの
     var requestedKeywords: [String] {
-        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: "", page: 1)).prefix { $0 != "=" } + "="
+        let prefix = StubAPIClient.key(for: RepositorySearchRequest(keyword: "", sort: .bestMatch, page: 1)).prefix { $0 != "=" } + "="
         return requestedKeys
             .filter { $0.hasPrefix(prefix) }
             .map { String($0.dropFirst(prefix.count).prefix { $0 != "&" }) }

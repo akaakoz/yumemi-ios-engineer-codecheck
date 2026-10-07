@@ -15,7 +15,7 @@ import XCTest
 final class MockGitHubServer: Sendable {
 
     enum Behavior: Equatable, Sendable {
-        /// 固定の検索結果（`searchResultsJSON`）を返す
+        /// 固定の検索結果（`searchResultItems`）を返す。最近更新された順（`sort=updated`）では、順番を逆にして返す
         case success
         /// 固定の検索結果を 2 秒遅れて返す（検索中の状態を確認するため）
         case slowSuccess
@@ -133,13 +133,15 @@ final class MockGitHubServer: Sendable {
         guard path.hasPrefix("/search/repositories") else {
             return Self.httpResponse(status: "404 Not Found", body: #"{"message": "Not Found"}"#)
         }
-        return makeSearchResponse(page: Self.searchPage(path: path))
+        return makeSearchResponse(page: Self.searchPage(path: path), sort: Self.queryValue("sort", in: path))
     }
 
-    private func makeSearchResponse(page: Int) -> Data {
+    private func makeSearchResponse(page: Int, sort: String?) -> Data {
         switch behavior {
+        case .success where sort == "updated":
+            return Self.httpResponse(status: "200 OK", body: Self.searchResultsJSON(items: Self.searchResultItems.reversed()))
         case .success, .slowSuccess, .detailServerError:
-            return Self.httpResponse(status: "200 OK", body: Self.searchResultsJSON)
+            return Self.httpResponse(status: "200 OK", body: Self.searchResultsJSON(items: Self.searchResultItems))
         case .noResults:
             return Self.httpResponse(status: "200 OK", body: #"{"total_count": 0, "incomplete_results": false, "items": []}"#)
         case .serverError:
@@ -160,8 +162,11 @@ final class MockGitHubServer: Sendable {
 
     /// 検索のリクエストのページ番号。指定が無い場合は 1
     private static func searchPage(path: String) -> Int {
-        let pageValue = URLComponents(string: path)?.queryItems?.first { $0.name == "page" }?.value
-        return pageValue.flatMap(Int.init) ?? 1
+        queryValue("page", in: path).flatMap(Int.init) ?? 1
+    }
+
+    private static func queryValue(_ name: String, in path: String) -> String? {
+        URLComponents(string: path)?.queryItems?.first { $0.name == name }?.value
     }
 
     /// `GET /repos/{owner}/{repo}`。実際の Watch 数（`subscribers_count`）は、検索結果の `watchers_count`（Star 数と同じ値）とは違う値にする
@@ -238,31 +243,35 @@ final class MockGitHubServer: Sendable {
     }
 
     /// GitHub の `GET /search/repositories` と同じ形式（snake_case）の固定レスポンス
-    private static let searchResultsJSON = """
-        {
-          "total_count": 2,
-          "items": [
-            {
-              "full_name": "apple/swift",
-              "description": "The Swift Programming Language",
-              "language": "C++",
-              "stargazers_count": 67000,
-              "watchers_count": 67000,
-              "forks_count": 10000,
-              "open_issues_count": 7000,
-              "pushed_at": "2024-01-02T03:04:05Z",
-              "owner": { "avatar_url": "https://example.invalid/avatar.png" }
-            },
-            {
-              "full_name": "yumemi/sample",
-              "language": null,
-              "stargazers_count": 1,
-              "watchers_count": 1,
-              "forks_count": 0,
-              "open_issues_count": 0,
-              "owner": { "avatar_url": "https://example.invalid/avatar.png" }
-            }
-          ]
-        }
+    private static func searchResultsJSON(items: [String]) -> String {
+        #"{"total_count": \#(items.count), "items": [\#(items.joined(separator: ","))]}"#
+    }
+
+    /// GitHub の `GET /search/repositories` の `items` と同じ形式（snake_case）の固定の検索結果
+    private static let searchResultItems = [
         """
+        {
+          "full_name": "apple/swift",
+          "description": "The Swift Programming Language",
+          "language": "C++",
+          "stargazers_count": 67000,
+          "watchers_count": 67000,
+          "forks_count": 10000,
+          "open_issues_count": 7000,
+          "pushed_at": "2024-01-02T03:04:05Z",
+          "owner": { "avatar_url": "https://example.invalid/avatar.png" }
+        }
+        """,
+        """
+        {
+          "full_name": "yumemi/sample",
+          "language": null,
+          "stargazers_count": 1,
+          "watchers_count": 1,
+          "forks_count": 0,
+          "open_issues_count": 0,
+          "owner": { "avatar_url": "https://example.invalid/avatar.png" }
+        }
+        """,
+    ]
 }

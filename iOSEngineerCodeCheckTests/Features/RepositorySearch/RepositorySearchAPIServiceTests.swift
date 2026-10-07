@@ -12,9 +12,23 @@ struct RepositorySearchAPIServiceTests {
 
     @Test("検索リクエストはキーワード・1 ページあたりの件数・ページ番号を送る")
     func requestContainsKeywordAndPage() throws {
-        let urlRequest = try APIClient(baseURL: APIClient.gitHubBaseURL).makeURLRequest(for: RepositorySearchRequest(keyword: "swift ui", page: 2))
+        let urlRequest = try APIClient(baseURL: APIClient.gitHubBaseURL).makeURLRequest(for: RepositorySearchRequest(keyword: "swift ui", sort: .bestMatch, page: 2))
 
         #expect(urlRequest.url?.absoluteString == "https://api.github.com/search/repositories?q=swift%20ui&per_page=30&page=2")
+    }
+
+    @Test(
+        "並び順を指定すると sort と order=desc を送り、関連度の順では送らない",
+        arguments: [
+            (RepositorySearchSort.bestMatch, "https://api.github.com/search/repositories?q=swift&per_page=30&page=1"),
+            (RepositorySearchSort.stars, "https://api.github.com/search/repositories?q=swift&sort=stars&order=desc&per_page=30&page=1"),
+            (RepositorySearchSort.updated, "https://api.github.com/search/repositories?q=swift&sort=updated&order=desc&per_page=30&page=1"),
+        ]
+    )
+    func requestContainsSort(sort: RepositorySearchSort, expectedURL: String) throws {
+        let urlRequest = try APIClient(baseURL: APIClient.gitHubBaseURL).makeURLRequest(for: RepositorySearchRequest(keyword: "swift", sort: sort, page: 1))
+
+        #expect(urlRequest.url?.absoluteString == expectedURL)
     }
 
     @Test("GitHub API 形式のレスポンスを Repository の配列に変換する")
@@ -47,7 +61,7 @@ struct RepositorySearchAPIServiceTests {
             }
             """)
 
-        let repositories = try await service.searchRepositories(keyword: "swift", page: 1).repositories
+        let repositories = try await service.searchRepositories(keyword: "swift", sort: .bestMatch, page: 1).repositories
 
         #expect(repositories.map(\.fullName) == ["apple/swift", "example/no-language"])
         #expect(repositories[0].stargazersCount == 67000)
@@ -64,7 +78,7 @@ struct RepositorySearchAPIServiceTests {
     func searchReturnsEmptyArray() async throws {
         let service = makeService(json: #"{"total_count": 0, "items": []}"#)
 
-        let page = try await service.searchRepositories(keyword: "no-hit", page: 1)
+        let page = try await service.searchRepositories(keyword: "no-hit", sort: .bestMatch, page: 1)
 
         #expect(page.repositories.isEmpty)
         #expect(!page.hasNextPage)
@@ -89,7 +103,7 @@ struct RepositorySearchAPIServiceTests {
     func hasNextPage(totalCount: Int, page: Int, itemCount: Int, expected: Bool) async throws {
         let service = makeService(json: Self.searchResponseJSON(totalCount: totalCount, itemCount: itemCount))
 
-        let result = try await service.searchRepositories(keyword: "swift", page: page)
+        let result = try await service.searchRepositories(keyword: "swift", sort: .bestMatch, page: page)
 
         #expect(result.repositories.count == itemCount)
         #expect(result.hasNextPage == expected)
@@ -100,7 +114,7 @@ struct RepositorySearchAPIServiceTests {
         let service = makeService(json: #"{"items": [{"full_name": "apple/swift"}]}"#)
 
         let error = await #expect(throws: APIError.self) {
-            try await service.searchRepositories(keyword: "swift", page: 1)
+            try await service.searchRepositories(keyword: "swift", sort: .bestMatch, page: 1)
         }
         guard case .decoding = error else {
             Issue.record("decoding エラーを期待したが \(String(describing: error)) だった")

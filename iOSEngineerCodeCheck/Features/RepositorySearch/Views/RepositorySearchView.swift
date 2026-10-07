@@ -76,9 +76,33 @@ struct RepositorySearchView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .safeAreaInset(edge: .trailing, spacing: 12) {
+            sortMenu
+        }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+
+    /// 検索結果の並び順を選ぶメニュー。選んでいる並び順にはチェックが付く
+    private var sortMenu: some View {
+        Menu {
+            Picker("並び順", selection: Binding(
+                get: { viewModel.sort },
+                set: { viewModel.changeSort(to: $0) }
+            )) {
+                ForEach(RepositorySearchSort.allCases, id: \.self) { sort in
+                    Text(sort.title)
+                        .tag(sort)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("並び順")
+        .accessibilityValue(viewModel.sort.title)
+        .accessibilityIdentifier("repositorySearch.sortMenu")
     }
 
     /// 一覧の一番下に、追加読み込みの状態を表示する。
@@ -134,6 +158,20 @@ struct RepositorySearchView: View {
                 .padding(.horizontal, 16)
         case .idle, .loaded:
             EmptyView()
+        }
+    }
+}
+
+private extension RepositorySearchSort {
+    /// 並び順のメニューに表示する名前
+    var title: String {
+        switch self {
+        case .bestMatch:
+            return "おすすめ順"
+        case .stars:
+            return "Star 数の多い順"
+        case .updated:
+            return "最近更新された順"
         }
     }
 }
