@@ -101,11 +101,13 @@ struct UserDefaultsBookmarkStorageTests {
             #expect(bookmarks == [
                 RepositoryDetail(
                     fullName: "apple/swift",
+                    description: nil,
                     language: "C++",
                     stargazersCount: 67000,
                     subscribersCount: nil,
                     forksCount: 10000,
                     openIssuesCount: 7000,
+                    pushedAt: nil,
                     owner: .init(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
                 ),
             ])
@@ -126,6 +128,40 @@ struct UserDefaultsBookmarkStorageTests {
             #expect(json.first?["subscribersCount"] as? Int == 2400)
             #expect((json.first?["owner"] as? [String: Any])?["avatarUrl"] is String)
             #expect(json.first?["marked"] == nil)
+        }
+    }
+
+    @Test("説明文と最終 push 日時を保存し、読み込み直しても同じ値になる")
+    func savesDescriptionAndPushedAt() throws {
+        try withIsolatedUserDefaults { userDefaults in
+            let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
+            let bookmark = RepositoryDetail.fixture(
+                fullName: "apple/swift",
+                description: "The Swift Programming Language",
+                pushedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+
+            try storage.saveBookmarks([bookmark])
+
+            #expect(try storage.loadBookmarks() == [bookmark])
+        }
+    }
+
+    @Test("説明文と最終 push 日時を保存していなかった以前のブックマークは、どちらも nil として読み込む")
+    func loadsBookmarkWithoutDescriptionAndPushedAt() throws {
+        try withIsolatedUserDefaults { userDefaults in
+            let previousFormatJSON = """
+                [{"fullName": "apple/swift", "language": "C++", "stargazersCount": 1, "subscribersCount": 2, \
+                "forksCount": 3, "openIssuesCount": 4, "owner": {"avatarUrl": "https://avatars.githubusercontent.com/u/1"}}]
+                """
+            userDefaults.set(Data(previousFormatJSON.utf8), forKey: UserDefaultsBookmarkStorage.storageKey)
+            let storage = UserDefaultsBookmarkStorage(userDefaults: userDefaults)
+
+            let bookmarks = try storage.loadBookmarks()
+
+            #expect(bookmarks.map(\.fullName) == ["apple/swift"])
+            #expect(bookmarks.first?.description == nil)
+            #expect(bookmarks.first?.pushedAt == nil)
         }
     }
 

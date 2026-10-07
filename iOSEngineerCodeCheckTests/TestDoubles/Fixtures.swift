@@ -14,11 +14,13 @@ extension Repository {
     ) -> Repository {
         Repository(
             fullName: fullName,
+            description: nil,
             language: language,
             stargazersCount: stargazersCount,
             watchersCount: 10,
             forksCount: 5,
             openIssuesCount: 1,
+            pushedAt: nil,
             owner: Owner(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
         )
     }
@@ -29,15 +31,19 @@ extension RepositoryDetail {
         fullName: String = "apple/swift",
         language: String? = "C++",
         stargazersCount: Int = 100,
-        subscribersCount: Int? = 2400
+        subscribersCount: Int? = 2400,
+        description: String? = nil,
+        pushedAt: Date? = nil
     ) -> RepositoryDetail {
         RepositoryDetail(
             fullName: fullName,
+            description: description,
             language: language,
             stargazersCount: stargazersCount,
             subscribersCount: subscribersCount,
             forksCount: 5,
             openIssuesCount: 1,
+            pushedAt: pushedAt,
             owner: Owner(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
         )
     }

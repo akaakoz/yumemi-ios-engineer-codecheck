@@ -23,6 +23,7 @@ struct RepositorySearchView: View {
             loadMoreFooter
         }
             .scrollPosition($listScrollPosition)
+            .scrollDismissesKeyboard(.automatic)
             // 検索中は前回の画面を操作できないようにする
             .disabled(viewModel.phase == .loading)
             .safeAreaInset(edge: .top) {
@@ -49,18 +50,35 @@ struct RepositorySearchView: View {
             }
     }
 
+    /// 検索欄。入力欄だと分かるよう先頭に虫眼鏡を置き、入力中は末尾のボタンで入力をまとめて消せる
     private var searchHeader: some View {
-        TextField("", text: $viewModel.query, prompt: Text("リポジトリを検索"))
-            .textFieldStyle(.roundedBorder)
-            .submitLabel(.search)
-            .focused($isSearchFieldFocused)
-            .onSubmit {
-                viewModel.search()
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("", text: $viewModel.query, prompt: Text("リポジトリを検索"))
+                .submitLabel(.search)
+                .focused($isSearchFieldFocused)
+                .onSubmit {
+                    viewModel.search()
+                }
+                .accessibilityIdentifier("repositorySearch.field")
+            if !viewModel.query.isEmpty {
+                Button {
+                    viewModel.query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("入力を消去")
+                .accessibilityIdentifier("repositorySearch.clearButton")
             }
-            .accessibilityIdentifier("repositorySearch.field")
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.bar)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     /// 一覧の一番下に、追加読み込みの状態を表示する。
@@ -104,8 +122,8 @@ struct RepositorySearchView: View {
         case .loading:
             ProgressView()
         case .idle where viewModel.repositories.isEmpty:
-            Text("GitHubのリポジトリを検索できるよー")
-                .foregroundStyle(.secondary)
+            // ブックマークが無いときの案内と同じ見た目にそろえる
+            ContentUnavailableView("GitHubのリポジトリを検索できるよー", systemImage: "magnifyingglass")
         case .loaded where viewModel.repositories.isEmpty:
             Text("該当するリポジトリがありません")
                 .foregroundStyle(.secondary)

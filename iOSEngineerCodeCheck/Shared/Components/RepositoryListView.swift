@@ -8,7 +8,10 @@ import SwiftUI
 /// 検索結果（`Repository`）とブックマーク（`RepositoryDetail`）の両方を表示できるようにする。
 protocol RepositoryListItem: Hashable, Identifiable {
     var fullName: String { get }
+    var description: String? { get }
     var language: String? { get }
+    var stargazersCount: Int { get }
+    var pushedAt: Date? { get }
 }
 
 extension Repository: RepositoryListItem {}
@@ -30,7 +33,7 @@ struct RepositoryListView<Item: RepositoryListItem, Footer: View>: View {
             LazyVStack(spacing: 0) {
                 ForEach(items) { item in
                     NavigationLink(value: item) {
-                        RepositoryRow(fullName: item.fullName, language: item.language)
+                        RepositoryRow(item: item)
                     }
                     .accessibilityIdentifier("repositoryRow.\(item.fullName)")
                     Divider()
@@ -50,24 +53,39 @@ extension RepositoryListView where Footer == EmptyView {
     }
 }
 
-private struct RepositoryRow: View {
+/// 開かずに目的のリポジトリか判断できるよう、名前に加えて説明文・Star 数・言語・最終更新を表示する
+private struct RepositoryRow<Item: RepositoryListItem>: View {
 
-    let fullName: String
-    let language: String?
+    let item: Item
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            // NavigationLink のラベルの中では複数行のテキストが中央揃えになるため、左揃えを明示する
-            Text(fullName)
+        // NavigationLink のラベルの中では複数行のテキストが中央揃えになるため、左揃えを明示する
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.fullName)
+                .font(.headline)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
 
-            Spacer(minLength: 16)
-
-            if let language {
-                Text(language)
+            if let description = item.description, !description.isEmpty {
+                Text(description)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
             }
+
+            HStack(spacing: 12) {
+                Label("\(item.stargazersCount)", systemImage: "star")
+                if let language = item.language {
+                    Text(language)
+                }
+                if let pushedAt = item.pushedAt {
+                    Label(pushedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -80,11 +98,13 @@ private struct RepositoryRow: View {
         RepositoryListView(items: [
             Repository(
                 fullName: "apple/swift",
+                description: "The Swift Programming Language",
                 language: "C++",
-                stargazersCount: 0,
-                watchersCount: 0,
+                stargazersCount: 67000,
+                watchersCount: 67000,
                 forksCount: 0,
                 openIssuesCount: 0,
+                pushedAt: .now.addingTimeInterval(-3 * 24 * 60 * 60),
                 owner: .init(avatarURLString: "https://avatars.githubusercontent.com/u/10639145")
             )
         ])

@@ -22,12 +22,14 @@ struct RepositoryDetailAPIServiceTests {
         let service = makeService(json: """
             {
               "full_name": "apple/swift",
+              "description": "The Swift Programming Language",
               "language": null,
               "stargazers_count": 67000,
               "watchers_count": 67000,
               "subscribers_count": 2400,
               "forks_count": 10000,
               "open_issues_count": 7000,
+              "pushed_at": "2024-01-02T03:04:05Z",
               "owner": { "avatar_url": "https://avatars.githubusercontent.com/u/10639145" }
             }
             """)
@@ -35,6 +37,8 @@ struct RepositoryDetailAPIServiceTests {
         let detail = try await service.fetchRepositoryDetail(fullName: "apple/swift")
 
         #expect(detail.fullName == "apple/swift")
+        #expect(detail.description == "The Swift Programming Language")
+        #expect(detail.pushedAt == ISO8601DateFormatter().date(from: "2024-01-02T03:04:05Z"))
         #expect(detail.language == nil)
         #expect(detail.stargazersCount == 67000)
         #expect(detail.subscribersCount == 2400)

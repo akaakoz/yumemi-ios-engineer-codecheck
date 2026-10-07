@@ -182,12 +182,14 @@ final class MockGitHubServer: Sendable {
         "/repos/apple/swift": """
             {
               "full_name": "apple/swift",
+              "description": "The Swift Programming Language",
               "language": "C++",
               "stargazers_count": 67000,
               "watchers_count": 67000,
               "subscribers_count": 2400,
               "forks_count": 10000,
               "open_issues_count": 7000,
+              "pushed_at": "2024-01-02T03:04:05Z",
               "owner": { "avatar_url": "https://example.invalid/avatar.png" }
             }
             """,
@@ -242,11 +244,13 @@ final class MockGitHubServer: Sendable {
           "items": [
             {
               "full_name": "apple/swift",
+              "description": "The Swift Programming Language",
               "language": "C++",
               "stargazers_count": 67000,
               "watchers_count": 67000,
               "forks_count": 10000,
               "open_issues_count": 7000,
+              "pushed_at": "2024-01-02T03:04:05Z",
               "owner": { "avatar_url": "https://example.invalid/avatar.png" }
             },
             {

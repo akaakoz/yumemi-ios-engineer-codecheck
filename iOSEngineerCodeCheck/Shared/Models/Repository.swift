@@ -7,11 +7,16 @@ import Foundation
 
 struct Repository: Decodable, Hashable, Identifiable, Sendable {
     let fullName: String
+    /// 説明文。設定されていない場合は `nil`
+    let description: String?
     let language: String?
     let stargazersCount: Int
     let watchersCount: Int
     let forksCount: Int
     let openIssuesCount: Int
+    /// 最後にコードが push された日時。今も開発されているかの目安として表示する
+    /// （`updated_at` は Star が付くだけでも変わるため使わない）
+    let pushedAt: Date?
     let owner: Owner
 
     /// GitHub 上で一意な "owner/name" を識別子にする。
