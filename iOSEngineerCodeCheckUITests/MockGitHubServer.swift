@@ -26,7 +26,7 @@ final class MockGitHubServer: Sendable {
         /// 検索は成功し、リポジトリ API（詳細の取得）だけが 500 を返す
         case detailServerError
         /// 検索結果を 2 ページに分けて返す（`pagedSearchResultsJSON`）。
-        /// 2 ページ目は 2 秒遅れて返す（追加読み込み中の状態を確認するため）
+        /// 2 ページ目は `releaseNextPageResponse()` が呼ばれるまで返さない（追加読み込み中の状態を確認するため）
         case paginated
         /// `paginated` と同じ 2 ページを返すが、2 ページ目の最初の要求だけ 500 を返す（再試行を確認するため）
         case paginatedNextPageFailsOnce
@@ -37,6 +37,13 @@ final class MockGitHubServer: Sendable {
     private let queue = DispatchQueue(label: "MockGitHubServer")
     /// `paginatedNextPageFailsOnce` で、2 ページ目の要求に一度失敗を返したか。接続をまたいで共有する
     private let hasFailedNextPage = Mutex(false)
+    /// `paginated` で保留している 2 ページ目の応答と、要求が届く前に許可された応答の数
+    private let nextPageHold = Mutex(NextPageHold())
+
+    private struct NextPageHold {
+        var heldResponses: [@Sendable () -> Void] = []
+        var releasedCount = 0
+    }
 
     init(behavior: Behavior) throws {
         self.behavior = behavior
@@ -67,6 +74,20 @@ final class MockGitHubServer: Sendable {
         listener.cancel()
     }
 
+    /// `paginated` で保留している 2 ページ目の応答を 1 つ返す。まだ要求が届いていない場合は、次に届いた要求にすぐ応答する。
+    func releaseNextPageResponse() {
+        let response: (@Sendable () -> Void)? = nextPageHold.withLock { hold in
+            guard !hold.heldResponses.isEmpty else {
+                hold.releasedCount += 1
+                return nil
+            }
+            return hold.heldResponses.removeFirst()
+        }
+        if let response {
+            queue.async(execute: response)
+        }
+    }
+
     private func handle(_ connection: NWConnection) {
         connection.start(queue: queue)
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [self] data, _, _, _ in
@@ -79,23 +100,28 @@ final class MockGitHubServer: Sendable {
                     connection.cancel()
                 })
             }
-            if let delay = responseDelay(path: path) {
-                queue.asyncAfter(deadline: .now() + delay, execute: send)
+            if behavior == .slowSuccess {
+                queue.asyncAfter(deadline: .now() + 2, execute: send)
+            } else if behavior == .paginated && Self.searchPage(path: path) >= 2 {
+                holdUntilReleased(send)
             } else {
                 send()
             }
         }
     }
 
-    /// 応答を遅らせる秒数。遅らせない場合は `nil`
-    private func responseDelay(path: String) -> TimeInterval? {
-        switch behavior {
-        case .slowSuccess:
-            return 2
-        case .paginated where Self.searchPage(path: path) >= 2:
-            return 2
-        case .success, .noResults, .serverError, .detailServerError, .paginated, .paginatedNextPageFailsOnce:
-            return nil
+    /// `releaseNextPageResponse()` で許可されるまで応答を保留する。すでに許可されていればすぐ応答する。
+    private func holdUntilReleased(_ send: @escaping @Sendable () -> Void) {
+        let isReleased = nextPageHold.withLock { hold in
+            guard hold.releasedCount > 0 else {
+                hold.heldResponses.append(send)
+                return false
+            }
+            hold.releasedCount -= 1
+            return true
+        }
+        if isReleased {
+            send()
         }
     }
 

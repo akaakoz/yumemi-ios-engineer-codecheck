@@ -228,16 +228,21 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
     /// 一番下までスクロールすると下部にローディングが出て次のページを読み込み、最後のページまで読み込むと消える
     func testScrollingToBottomLoadsNextPage() throws {
-        let app = try launchApp(searchBehavior: .paginated)
+        let (app, server) = try launchAppWithServer(searchBehavior: .paginated)
         let loadMoreIndicator = loadMoreIndicator(app)
+        let lastRow = repositoryRow(app, fullName: "paged/repo31")
         search(app, keyword: "swift")
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
         // 1 ページ目の途中では、下部のローディングは出ない
         XCTAssertFalse(loadMoreIndicator.exists)
 
+        // モックサーバーが 2 ページ目を返すまで、下部のローディングが出たままになる
         scrollUntilExists(loadMoreIndicator, in: app)
+        XCTAssertFalse(lastRow.exists)
 
-        XCTAssertTrue(repositoryRow(app, fullName: "paged/repo31").waitForExistence(timeout: timeout))
+        server.releaseNextPageResponse()
+
+        XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
         XCTAssertTrue(waitForNonExistence(of: loadMoreIndicator))
     }
 
@@ -261,12 +266,13 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
     /// 一番下を表示したまま検索し直すと、新しい結果を一番上から 1 ページ目だけ表示し、一番下までスクロールすると続きを読み込める
     func testSearchingAgainWhileScrolledToBottomStillLoadsNextPage() throws {
-        let app = try launchApp(searchBehavior: .paginated)
+        let (app, server) = try launchAppWithServer(searchBehavior: .paginated)
         let field = app.textFields["repositorySearch.field"]
         let lastRow = repositoryRow(app, fullName: "paged/repo31")
         search(app, keyword: "swift")
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").waitForExistence(timeout: timeout))
         scrollUntilExists(loadMoreIndicator(app), in: app)
+        server.releaseNextPageResponse()
         XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
 
         // 入力はそのままで、もう一度検索する。一番上に戻り、1 ページ目だけの結果になる
@@ -276,12 +282,13 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo1").isHittable)
         XCTAssertFalse(loadMoreIndicator(app).exists)
 
-        // 一番下まで行っても、2 ページ目が返るまでは新しい 1 ページ目の 30 件だけが並ぶ（モックは 2 ページ目を遅らせて返す）
+        // 一番下まで行っても、2 ページ目が返るまでは新しい 1 ページ目の 30 件だけが並ぶ
         scrollUntilExists(loadMoreIndicator(app), in: app)
         XCTAssertTrue(repositoryRow(app, fullName: "paged/repo30").exists)
         XCTAssertFalse(lastRow.exists)
 
         // 新しい結果の続き（2 ページ目）を読み込む
+        server.releaseNextPageResponse()
         XCTAssertTrue(lastRow.waitForExistence(timeout: timeout))
     }
 
@@ -291,6 +298,14 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         searchBehavior: MockGitHubServer.Behavior = .success,
         bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
     ) throws -> XCUIApplication {
+        try launchAppWithServer(searchBehavior: searchBehavior, bookmarkStorageSuiteName: bookmarkStorageSuiteName).app
+    }
+
+    /// `launchApp` と同じ。テストからモックサーバーの応答の時機を決める場合に使う
+    private func launchAppWithServer(
+        searchBehavior: MockGitHubServer.Behavior = .success,
+        bookmarkStorageSuiteName: String = "UITests.\(UUID().uuidString)"
+    ) throws -> (app: XCUIApplication, server: MockGitHubServer) {
         let server = try MockGitHubServer(behavior: searchBehavior)
         let baseURL = try server.start(testCase: self)
         addTeardownBlock {
@@ -303,7 +318,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
             + [LaunchOption.bookmarkStorageSuiteNameKey, bookmarkStorageSuiteName]
             + LaunchOption.fixedLocale
         app.launch()
-        return app
+        return (app, server)
     }
 
     /// アプリを終了し、終了しきったことを確かめる。
