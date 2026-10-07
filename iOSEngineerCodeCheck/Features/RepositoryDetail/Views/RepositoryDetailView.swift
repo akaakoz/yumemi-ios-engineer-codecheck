@@ -15,15 +15,13 @@ struct RepositoryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
+            VStack(alignment: .leading, spacing: 24) {
                 detailContent
-
                 webPageLink
-
                 bookmarkButton
             }
             .padding(20)
-            .frame(maxWidth: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -46,22 +44,27 @@ struct RepositoryDetailView: View {
     private var detailContent: some View {
         switch viewModel.phase {
         case .loading:
-            titleView(viewModel.fullName)
+            headerView(avatarURL: nil)
             ProgressView()
+                .frame(maxWidth: .infinity)
         case .loaded(let detail):
-            avatarView(detail.owner.avatarURL)
-            titleView(detail.fullName)
+            headerView(avatarURL: detail.owner.avatarURL)
             summaryView(detail)
         case .failed(let error):
-            titleView(viewModel.fullName)
+            headerView(avatarURL: nil)
             failureView(error)
         }
     }
 
-    private func titleView(_ fullName: String) -> some View {
-        Text(fullName)
-            .font(.title)
-            .multilineTextAlignment(.center)
+    private func headerView(avatarURL: URL?) -> some View {
+        HStack(spacing: 12) {
+            avatarView(avatarURL)
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+            Text(viewModel.fullName)
+                .font(.title2.bold())
+                .lineLimit(2)
+        }
     }
 
     private func avatarView(_ url: URL?) -> some View {
@@ -70,60 +73,74 @@ struct RepositoryDetailView: View {
             case .success(let image):
                 image
                     .resizable()
-                    .scaledToFit()
-            case .failure:
-                Image(systemName: "person.crop.square")
+                    .scaledToFill()
+            case .failure, .empty:
+                Image(systemName: "person.crop.circle.fill")
                     .resizable()
                     .scaledToFit()
                     .foregroundStyle(.secondary)
-                    .padding(48)
-            default:
-                ProgressView()
+            @unknown default:
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: 360, maxHeight: 360)
-        .frame(maxWidth: .infinity)
     }
 
     private func summaryView(_ detail: RepositoryDetail) -> some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             if let description = detail.description, !description.isEmpty {
                 Text(description)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if let language = detail.language {
-                Text("Written in \(language)")
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            statsView(detail)
 
-            if let pushedAt = detail.pushedAt {
-                Label(pushedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            VStack(alignment: .trailing, spacing: 16) {
-                Text("\(detail.stargazersCount) stars")
-                watchersCountView(detail.subscribersCount)
-                Text("\(detail.forksCount) forks")
-                Text("\(detail.openIssuesCount) open issues")
+            HStack(spacing: 16) {
+                if let language = detail.language {
+                    Label(language, systemImage: "chevron.left.forwardslash.chevron.right")
+                        .accessibilityIdentifier("repositoryDetail.language")
+                }
+                if let pushedAt = detail.pushedAt {
+                    Label(pushedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
+                }
             }
             .font(.subheadline)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
     }
 
-    /// Watch 数を保存していなかった以前の形式のブックマークでは `nil` になり、その場合は行ごと表示しない
-    @ViewBuilder
-    private func watchersCountView(_ subscribersCount: Int?) -> some View {
-        if let subscribersCount {
-            Text("\(subscribersCount) watchers")
+    /// 主な数値を横一列に並べ、比べやすくする。
+    /// Watch 数を保存していなかった以前の形式のブックマークでは `nil` になり、その場合は列ごと表示しない
+    private func statsView(_ detail: RepositoryDetail) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            statView(count: detail.stargazersCount, title: "Stars", systemImage: "star", identifier: "stars")
+            if let subscribersCount = detail.subscribersCount {
+                statView(count: subscribersCount, title: "Watchers", systemImage: "eye", identifier: "watchers")
+            }
+            statView(count: detail.forksCount, title: "Forks", systemImage: "arrow.triangle.branch", identifier: "forks")
+            statView(count: detail.openIssuesCount, title: "Issues", systemImage: "exclamationmark.circle", identifier: "issues")
         }
+    }
+
+    private func statView(count: Int, title: String, systemImage: String, identifier: String) -> some View {
+        VStack(spacing: 4) {
+            // 記号ごとに高さが違っても、数値の位置がそろうよう高さを固定する
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+                .frame(height: 24)
+            Text("\(count)")
+                .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("repositoryDetail.\(identifier)")
     }
 
     private func failureView(_ error: APIError) -> some View {
@@ -133,6 +150,7 @@ struct RepositoryDetailView: View {
                 .multilineTextAlignment(.center)
             reloadButton
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var reloadButton: some View {
@@ -148,12 +166,13 @@ struct RepositoryDetailView: View {
             NavigationLink {
                 RepositoryWebPageView(url: url, title: detail.fullName)
             } label: {
-                Label("GitHub で開く", systemImage: "safari")
+                Label("GitHub で詳細を見る", systemImage: "safari")
             }
             // ブックマークのボタンと区別できるよう、ボタンではなく文字列のリンクとして表示する
             .buttonStyle(.plain)
+            .font(.caption)
             .foregroundStyle(.blue)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -161,16 +180,24 @@ struct RepositoryDetailView: View {
     @ViewBuilder
     private var bookmarkButton: some View {
         if viewModel.isBookmarked {
-            Button("Remove from Bookmark") {
+            Button {
                 viewModel.removeBookmark()
+            } label: {
+                Text("Remove from Bookmark")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
             .tint(.red)
         } else {
-            Button("Add to Bookmark") {
+            Button {
                 viewModel.addBookmark()
+            } label: {
+                Text("Add to Bookmark")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
             .tint(.blue)
             .disabled(viewModel.loadedDetail == nil)
         }

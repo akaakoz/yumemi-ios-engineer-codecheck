@@ -47,14 +47,16 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
 
         resultRow.tap()
 
-        XCTAssertTrue(app.staticTexts["Written in C++"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(detailItem(app, "language").waitForExistence(timeout: timeout))
+        XCTAssertEqual(detailItem(app, "language").label, "C++")
         XCTAssertTrue(app.staticTexts["The Swift Programming Language"].exists)
-        XCTAssertTrue(app.staticTexts["67,000 stars"].exists)
+        XCTAssertTrue(detailItem(app, "stars").label.contains("67,000"))
         // 詳細はリポジトリ API の値で表示する。Watch 数は検索結果の watchers_count（Star 数と同じ値）ではなく subscribers_count
-        XCTAssertTrue(app.staticTexts["2,400 watchers"].waitForExistence(timeout: timeout))
-        XCTAssertFalse(app.staticTexts["67,000 watchers"].exists)
-        XCTAssertTrue(app.staticTexts["10,000 forks"].exists)
-        XCTAssertTrue(app.staticTexts["7,000 open issues"].exists)
+        XCTAssertTrue(detailItem(app, "watchers").waitForExistence(timeout: timeout))
+        XCTAssertTrue(detailItem(app, "watchers").label.contains("2,400"))
+        XCTAssertFalse(detailItem(app, "watchers").label.contains("67,000"))
+        XCTAssertTrue(detailItem(app, "forks").label.contains("10,000"))
+        XCTAssertTrue(detailItem(app, "issues").label.contains("7,000"))
     }
 
     /// 詳細画面のボタン表示が、押すたびに登録状態に合わせて切り替わる（Search タブ・Bookmark タブとも）
@@ -184,19 +186,22 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Search"].isSelected)
     }
 
-    /// 詳細画面の「GitHub で開く」で、リポジトリのページをアプリ内の Web ページの画面で開ける
+    /// 詳細画面の「GitHub で詳細を見る」で、リポジトリのページをアプリ内の Web ページの画面で開ける
     /// （ページの内容は実際の GitHub から読み込むため、画面が開くことだけを確かめる）
     func testDetailOpensRepositoryWebPage() throws {
         let app = try launchApp()
         search(app, keyword: "swift")
         repositoryRow(app, fullName: "apple/swift").tap()
-        let openButton = app.buttons["GitHub で開く"]
+        let openButton = app.buttons["GitHub で詳細を見る"]
         XCTAssertTrue(openButton.waitForExistence(timeout: timeout))
 
         openButton.tap()
 
         XCTAssertTrue(app.navigationBars["apple/swift"].waitForExistence(timeout: timeout))
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: timeout))
+        // 開いた直後は履歴が無いため、前後のページへの移動はできない
+        XCTAssertFalse(app.buttons["前のページ"].isEnabled)
+        XCTAssertFalse(app.buttons["次のページ"].isEnabled)
     }
 
     func testSearchWithNoResultsShowsNoResultsMessage() throws {
@@ -236,7 +241,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["apple/swift"].exists)
         XCTAssertTrue(app.buttons["Add to Bookmark"].exists)
         XCTAssertFalse(app.buttons["Add to Bookmark"].isEnabled)
-        XCTAssertFalse(app.staticTexts["67,000 stars"].exists)
+        XCTAssertFalse(detailItem(app, "stars").exists)
     }
 
     /// ブックマークから開いた詳細画面は、保存している値だけで表示し、リポジトリ API と通信しない
@@ -254,8 +259,9 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         failingApp.tabBars.buttons["Bookmark"].tap()
         repositoryRow(failingApp, fullName: "apple/swift").tap()
 
-        XCTAssertTrue(failingApp.staticTexts["67,000 stars"].waitForExistence(timeout: timeout))
-        XCTAssertTrue(failingApp.staticTexts["2,400 watchers"].exists)
+        XCTAssertTrue(detailItem(failingApp, "stars").waitForExistence(timeout: timeout))
+        XCTAssertTrue(detailItem(failingApp, "stars").label.contains("67,000"))
+        XCTAssertTrue(detailItem(failingApp, "watchers").label.contains("2,400"))
         XCTAssertFalse(failingApp.staticTexts["リポジトリの情報を取得できませんでした。時間をおいて再度お試しください。"].exists)
         XCTAssertFalse(failingApp.buttons["再読み込み"].exists)
 
@@ -399,6 +405,11 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
     /// 検索結果の一覧の下部に、続きのページがある間・読み込み中に表示するローディング
     private func loadMoreIndicator(_ app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["repositorySearch.loadMoreIndicator"]
+    }
+
+    /// 詳細画面の項目（`repositoryDetail.<name>`。stars・watchers・forks・issues・language）
+    private func detailItem(_ app: XCUIApplication, _ name: String) -> XCUIElement {
+        app.descendants(matching: .any)["repositoryDetail.\(name)"]
     }
 
     private func repositoryRow(_ app: XCUIApplication, fullName: String) -> XCUIElement {

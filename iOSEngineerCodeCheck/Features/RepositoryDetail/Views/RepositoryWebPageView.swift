@@ -6,16 +6,26 @@
 import SwiftUI
 import WebKit
 
-/// GitHub 上のリポジトリのページを、アプリを離れずに表示する。
 struct RepositoryWebPageView: View {
+
+    /// 読み込む対象
+    private enum LoadTarget {
+        /// 最初に開いたリポジトリのページ
+        case repositoryPage
+        /// 履歴の前後のページ
+        case historyItem(WebPage.BackForwardList.Item)
+    }
 
     let url: URL
     let title: String
 
     @State private var page = WebPage()
     @State private var loadError: (any Error)?
-    /// 「再読み込み」で増やし、読み込みをやり直す
-    @State private var loadAttempt = 0
+    @State private var loadTarget = LoadTarget.repositoryPage
+    /// 読み込みを要求するたびに増やし、`.task(id:)` で読み込みをやり直す。同じページを続けて要求した場合も読み込み直す
+    @State private var loadRequestCount = 0
+    @State private var backItem: WebPage.BackForwardList.Item?
+    @State private var forwardItem: WebPage.BackForwardList.Item?
 
     var body: some View {
         WebView(page)
@@ -32,9 +42,50 @@ struct RepositoryWebPageView: View {
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .task(id: loadAttempt) {
-                await load()
+            .safeAreaInset(edge: .bottom) {
+                historyNavigationBar
             }
+            .onChange(of: page.url) {
+                updateHistory()
+            }
+            .onChange(of: page.isLoading) {
+                updateHistory()
+            }
+            .task(id: loadRequestCount) {
+                await load(loadTarget)
+            }
+    }
+
+    /// タブバーの上に置く、前後のページへの移動ボタン
+    private var historyNavigationBar: some View {
+        HStack {
+            Button {
+                if let backItem {
+                    requestLoad(.historyItem(backItem))
+                }
+            } label: {
+                Image(systemName: "chevron.backward")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("前のページ")
+            .disabled(backItem == nil)
+
+            Spacer()
+
+            Button {
+                if let forwardItem {
+                    requestLoad(.historyItem(forwardItem))
+                }
+            } label: {
+                Image(systemName: "chevron.forward")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("次のページ")
+            .disabled(forwardItem == nil)
+        }
+        .font(.title3)
+        .padding(.horizontal, 16)
+        .background(.bar)
     }
 
     private var failureView: some View {
@@ -43,7 +94,7 @@ struct RepositoryWebPageView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("再読み込み") {
-                loadAttempt += 1
+                requestLoad(loadTarget)
             }
         }
         .padding(16)
@@ -51,11 +102,28 @@ struct RepositoryWebPageView: View {
         .background(.background)
     }
 
-    private func load() async {
+    private func updateHistory() {
+        backItem = page.backForwardList.backList.last
+        forwardItem = page.backForwardList.forwardList.first
+    }
+
+    private func requestLoad(_ target: LoadTarget) {
+        loadTarget = target
+        loadRequestCount += 1
+    }
+
+    private func load(_ target: LoadTarget) async {
         loadError = nil
         do {
-            for try await _ in page.load(url) {}
+            switch target {
+            case .repositoryPage:
+                for try await _ in page.load(url) {}
+            case .historyItem(let item):
+                for try await _ in page.load(item) {}
+            }
         } catch {
+            // 別の読み込みを始めたり画面を閉じたりして止めた場合は、失敗として扱わない
+            guard !Task.isCancelled else { return }
             loadError = error
         }
     }
