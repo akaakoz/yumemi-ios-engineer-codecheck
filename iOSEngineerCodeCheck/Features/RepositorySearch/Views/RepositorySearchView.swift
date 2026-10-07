@@ -34,24 +34,7 @@ struct RepositorySearchView: View {
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Repository.self) { repository in
-                RepositoryDetailView(
-                    source: .remote(fullName: repository.fullName),
-                    isBookmarked: { viewModel.isBookmarked(fullName: repository.fullName) },
-                    addBookmark: { viewModel.addBookmark($0) },
-                    removeBookmark: { viewModel.removeBookmark(fullName: repository.fullName) }
-                )
-            }
-            .onAppear {
-                viewModel.loadBookmarks()
-            }
-            .alert(
-                "ブックマーク",
-                isPresented: $viewModel.isShowingBookmarkStorageError,
-                presenting: viewModel.bookmarkStorageError
-            ) { _ in
-                Button("OK", role: .cancel) {}
-            } message: { error in
-                Text(error.message)
+                RepositoryDetailView(source: .remote(fullName: repository.fullName))
             }
             .onChange(of: viewModel.phase) { _, phase in
                 // 新しい検索の結果は一番上から表示する
