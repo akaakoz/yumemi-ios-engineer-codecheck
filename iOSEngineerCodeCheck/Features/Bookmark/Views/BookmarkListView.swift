@@ -7,18 +7,21 @@ import SwiftUI
 
 struct BookmarkListView: View {
 
+    /// ブックマークが無いときに、リポジトリを探しに Search タブへ移る
+    let showSearch: () -> Void
+
     @State private var viewModel: BookmarkViewModel
 
-    init(viewModel: BookmarkViewModel = BookmarkViewModel()) {
+    init(viewModel: BookmarkViewModel = BookmarkViewModel(), showSearch: @escaping () -> Void) {
         _viewModel = State(initialValue: viewModel)
+        self.showSearch = showSearch
     }
 
     var body: some View {
         RepositoryListView(items: viewModel.bookmarks)
             .overlay {
                 if viewModel.bookmarks.isEmpty {
-                    Text("検索ボタンをタップして")
-                        .foregroundStyle(.secondary)
+                    emptyGuide
                 }
             }
             .navigationTitle("Bookmarks")
@@ -39,5 +42,19 @@ struct BookmarkListView: View {
             } message: { error in
                 Text(error.message)
             }
+    }
+
+    /// ブックマークが無いときに、追加の方法と、探しに行く操作を示す
+    private var emptyGuide: some View {
+        ContentUnavailableView {
+            Label("ブックマークはまだありません", systemImage: "bookmark")
+        } description: {
+            Text("Search タブでリポジトリを探し、詳細画面の「Add to Bookmark」で追加できます。")
+        } actions: {
+            Button("リポジトリを探す") {
+                showSearch()
+            }
+            .buttonStyle(.borderedProminent)
+        }
     }
 }

@@ -25,7 +25,9 @@ struct MainTabView: View {
 
     private var bookmarkTab: some View {
         NavigationStack {
-            BookmarkListView()
+            BookmarkListView {
+                selectedTab = .search
+            }
         }
         .tabItem {
             Image(systemName: "bookmark.fill")

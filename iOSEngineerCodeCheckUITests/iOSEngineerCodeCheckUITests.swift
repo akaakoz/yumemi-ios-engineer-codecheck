@@ -85,7 +85,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         XCTAssertTrue(addButton.waitForExistence(timeout: timeout))
         app.tabBars.buttons["Bookmark"].tap()
         app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["検索ボタンをタップして"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["ブックマークはまだありません"].waitForExistence(timeout: timeout))
     }
 
     /// Bookmark タブで削除するとすぐ一覧から消え、詳細画面には留まって再登録でき、再起動後もその状態が保たれる
@@ -94,7 +94,7 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         let addButton = app.buttons["Add to Bookmark"]
         let removeButton = app.buttons["Remove from Bookmark"]
         let bookmarkRow = repositoryRow(app, fullName: "apple/swift")
-        let emptyMessage = app.staticTexts["検索ボタンをタップして"]
+        let emptyMessage = app.staticTexts["ブックマークはまだありません"]
 
         search(app, keyword: "swift")
         repositoryRow(app, fullName: "apple/swift").tap()
@@ -145,6 +145,38 @@ final class iOSEngineerCodeCheckUITests: XCTestCase {
         field.typeText("swift")
 
         XCTAssertEqual(field.value as? String, "swift")
+    }
+
+    /// 入力中は検索欄のクリアボタンで入力をまとめて消せ、検索結果も消えて最初の案内に戻る
+    func testClearButtonClearsQueryAndResults() throws {
+        let app = try launchApp()
+        let field = app.textFields["repositorySearch.field"]
+        let clearButton = app.buttons["repositorySearch.clearButton"]
+        XCTAssertTrue(field.waitForExistence(timeout: timeout))
+        // 入力が無いときは、クリアボタンを出さない
+        XCTAssertFalse(clearButton.exists)
+
+        search(app, keyword: "swift")
+        XCTAssertTrue(repositoryRow(app, fullName: "apple/swift").waitForExistence(timeout: timeout))
+
+        clearButton.tap()
+
+        XCTAssertEqual(field.value as? String, "リポジトリを検索")
+        XCTAssertTrue(waitForNonExistence(of: repositoryRow(app, fullName: "apple/swift")))
+        XCTAssertTrue(app.staticTexts["GitHubのリポジトリを検索できるよー"].exists)
+        XCTAssertFalse(clearButton.exists)
+    }
+
+    /// ブックマークが無いときは追加の方法を案内し、「リポジトリを探す」で Search タブに移れる
+    func testEmptyBookmarkGuideLeadsToSearch() throws {
+        let app = try launchApp()
+        app.tabBars.buttons["Bookmark"].tap()
+        XCTAssertTrue(app.staticTexts["ブックマークはまだありません"].waitForExistence(timeout: timeout))
+
+        app.buttons["リポジトリを探す"].tap()
+
+        XCTAssertTrue(app.textFields["repositorySearch.field"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.tabBars.buttons["Search"].isSelected)
     }
 
     func testSearchWithNoResultsShowsNoResultsMessage() throws {
