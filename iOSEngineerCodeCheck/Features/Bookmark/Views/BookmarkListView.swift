@@ -25,12 +25,7 @@ struct BookmarkListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: RepositoryDetail.self) { bookmark in
                 // ブックマークから開いた詳細は保存している値だけで表示し、通信しない
-                RepositoryDetailView(
-                    source: .saved(bookmark),
-                    isBookmarked: { viewModel.isBookmarked(fullName: bookmark.fullName) },
-                    addBookmark: { viewModel.addBookmark($0) },
-                    removeBookmark: { viewModel.removeBookmark(fullName: bookmark.fullName) }
-                )
+                RepositoryDetailView(source: .saved(bookmark))
             }
             .onAppear {
                 viewModel.loadBookmarks()

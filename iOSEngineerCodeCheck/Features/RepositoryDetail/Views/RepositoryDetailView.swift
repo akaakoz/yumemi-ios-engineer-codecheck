@@ -6,24 +6,11 @@
 import SwiftUI
 
 struct RepositoryDetailView: View {
-    /// 保存に失敗した場合など、状態が変わらなければボタンの表示も変わらない。
-    let isBookmarked: @MainActor () -> Bool
-    let addBookmark: @MainActor (RepositoryDetail) -> Void
-    let removeBookmark: @MainActor () -> Void
 
     @State private var viewModel: RepositoryDetailViewModel
 
-    init(
-        source: RepositoryDetailViewModel.Source,
-        isBookmarked: @escaping @MainActor () -> Bool,
-        addBookmark: @escaping @MainActor (RepositoryDetail) -> Void,
-        removeBookmark: @escaping @MainActor () -> Void,
-        apiService: RepositoryDetailAPIServiceProtocol = RepositoryDetailAPIService()
-    ) {
-        self.isBookmarked = isBookmarked
-        self.addBookmark = addBookmark
-        self.removeBookmark = removeBookmark
-        _viewModel = State(initialValue: RepositoryDetailViewModel(source: source, apiService: apiService))
+    init(source: RepositoryDetailViewModel.Source) {
+        _viewModel = State(initialValue: RepositoryDetailViewModel(source: source))
     }
 
     var body: some View {
@@ -40,6 +27,16 @@ struct RepositoryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             viewModel.loadIfNeeded()
+            viewModel.loadBookmarkState()
+        }
+        .alert(
+            "ブックマーク",
+            isPresented: $viewModel.isShowingBookmarkStorageError,
+            presenting: viewModel.bookmarkStorageError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { error in
+            Text(error.message)
         }
     }
 
@@ -130,19 +127,18 @@ struct RepositoryDetailView: View {
         }
     }
 
+    /// 保存に失敗した場合など、登録状態が変わらなければボタンの表示も変わらない。
     @ViewBuilder
     private var bookmarkButton: some View {
-        if isBookmarked() {
+        if viewModel.isBookmarked {
             Button("Remove from Bookmark") {
-                removeBookmark()
+                viewModel.removeBookmark()
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
         } else {
             Button("Add to Bookmark") {
-                if let detail = viewModel.loadedDetail {
-                    addBookmark(detail)
-                }
+                viewModel.addBookmark()
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)

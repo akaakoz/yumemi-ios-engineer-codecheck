@@ -9,6 +9,9 @@ import os
 
 /// 詳細画面の状態。Search タブから開いた場合は、画面を開いたときにリポジトリ API から詳細を取得する。
 /// Bookmark タブから開いた場合は、保存している詳細だけで表示し、通信しない。
+///
+/// ブックマークの登録状態は、どちらのタブから開いた場合も、画面が表示されるたびに保存先から読み込む。
+/// 保存に成功したときだけ登録状態を変え、失敗したときは変えずに保存先の内容と食い違わないようにする。
 @MainActor
 @Observable
 final class RepositoryDetailViewModel {
@@ -40,16 +43,35 @@ final class RepositoryDetailViewModel {
     /// "owner/name" の形式のリポジトリ名。詳細を表示できるまでのタイトルに使う
     let fullName: String
 
+    private(set) var isBookmarked = false
+    /// 直近のブックマークの読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
+    private(set) var bookmarkStorageError: BookmarkStorageError?
+
+    var isShowingBookmarkStorageError: Bool {
+        get { bookmarkStorageError != nil }
+        set {
+            if !newValue {
+                bookmarkStorageError = nil
+            }
+        }
+    }
+
     /// 実行中の取得。画面が表示し直されても、重ねて取得しない
     @ObservationIgnored private(set) var loadTask: Task<Void, Never>?
 
     private let source: Source
     private let apiService: RepositoryDetailAPIServiceProtocol
+    private let bookmarkService: BookmarkServiceProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositoryDetail")
 
-    init(source: Source, apiService: RepositoryDetailAPIServiceProtocol = RepositoryDetailAPIService()) {
+    init(
+        source: Source,
+        apiService: RepositoryDetailAPIServiceProtocol = RepositoryDetailAPIService(),
+        bookmarkService: BookmarkServiceProtocol = BookmarkService()
+    ) {
         self.source = source
         self.apiService = apiService
+        self.bookmarkService = bookmarkService
         switch source {
         case .remote(let fullName):
             self.fullName = fullName
@@ -77,6 +99,35 @@ final class RepositoryDetailViewModel {
         load()
     }
 
+    // MARK: - ブックマーク
+
+    /// 画面が表示されたときに呼ぶ。もう一方のタブでの変更も含めて、保存先から登録状態を読み込む。
+    func loadBookmarkState() {
+        do {
+            isBookmarked = try bookmarkService.loadBookmarks().contains { $0.fullName == fullName }
+        } catch {
+            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
+            bookmarkStorageError = error
+        }
+    }
+
+    /// 表示できている詳細をブックマークに追加する。詳細を表示できるまでは何もしない。
+    func addBookmark() {
+        guard let loadedDetail else {
+            return
+        }
+        updateBookmarks { () throws(BookmarkStorageError) in
+            try bookmarkService.addBookmark(loadedDetail)
+        }
+    }
+
+    /// ブックマークから削除する。画面は表示したまま残り、`addBookmark()` で追加し直せる。
+    func removeBookmark() {
+        updateBookmarks { () throws(BookmarkStorageError) in
+            try bookmarkService.removeBookmark(fullName: fullName)
+        }
+    }
+
     /// 取得に失敗したときに画面に表示する文言。原因に応じて、利用者が取れる対応が分かるようにする。
     static func failureMessage(for error: APIError) -> String {
         switch error {
@@ -93,6 +144,17 @@ final class RepositoryDetailViewModel {
     }
 
     // MARK: - Private
+
+    /// 成功したときだけ登録状態を保存先の内容に合わせ、失敗したときは変えずに `bookmarkStorageError` とログに残す。
+    private func updateBookmarks(_ update: () throws(BookmarkStorageError) -> [RepositoryDetail]) {
+        do {
+            isBookmarked = try update().contains { $0.fullName == fullName }
+            bookmarkStorageError = nil
+        } catch {
+            logger.error("Failed to update bookmarks: \(String(describing: error), privacy: .public)")
+            bookmarkStorageError = error
+        }
+    }
     private func load() {
         phase = .loading
         loadTask = Task {

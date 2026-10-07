@@ -7,9 +7,7 @@ import Foundation
 import Observation
 import os
 
-/// ブックマークは Bookmark タブとインスタンスを共有せず、保存先を通して同期する。
-/// 登録済みかどうかは、保存済みの一覧に含まれているかで決まる。
-/// 保存に成功したときだけ登録状態を変え、失敗したときは変えずに保存先の内容と食い違わないようにする。
+/// 検索結果の状態。最初のページは `search()`、2 ページ目以降は `loadMoreIfNeeded()` で同じ検索条件のまま読み込む。
 @MainActor
 @Observable
 final class RepositorySearchViewModel {
@@ -49,17 +47,6 @@ final class RepositorySearchViewModel {
     /// 直近に成功した検索の結果（読み込んだページを順に連結し、同じリポジトリは 1 件にまとめたもの）。
     /// 新しい検索の通信中は前回の結果を表示し続け、失敗したら空にする。
     private(set) var repositories: [Repository] = []
-    /// 直近のブックマークの読み込み・保存の失敗。画面でアラートとして表示し、閉じたら `nil` に戻す。
-    private(set) var bookmarkStorageError: BookmarkStorageError?
-
-    var isShowingBookmarkStorageError: Bool {
-        get { bookmarkStorageError != nil }
-        set {
-            if !newValue {
-                bookmarkStorageError = nil
-            }
-        }
-    }
 
     /// 実行中の検索。新しい検索を始めるときにキャンセルし、古い結果で上書きされないようにする。
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
@@ -72,19 +59,12 @@ final class RepositorySearchViewModel {
     var canLoadMore: Bool {
         phase == .loaded && loadMorePhase == .idle && nextPage != nil
     }
-    /// 表示用のブックマーク済みのリポジトリ。
-    private var bookmarkedRepositoryIDs: Set<RepositoryDetail.ID> = []
 
     private let apiService: RepositorySearchAPIServiceProtocol
-    private let bookmarkService: BookmarkServiceProtocol
     private let logger = Logger(subsystem: "jp.yumemi.iOSEngineerCodeCheck", category: "RepositorySearch")
 
-    init(
-        apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService(),
-        bookmarkService: BookmarkServiceProtocol = BookmarkService()
-    ) {
+    init(apiService: RepositorySearchAPIServiceProtocol = RepositorySearchAPIService()) {
         self.apiService = apiService
-        self.bookmarkService = bookmarkService
     }
 
     func search() {
@@ -152,33 +132,6 @@ final class RepositorySearchViewModel {
         }
     }
 
-    // MARK: - ブックマーク
-    func loadBookmarks() {
-        do {
-            bookmarkedRepositoryIDs = Set(try bookmarkService.loadBookmarks().map(\.id))
-        } catch {
-            logger.error("Failed to load bookmarks: \(String(describing: error), privacy: .public)")
-            bookmarkStorageError = error
-        }
-    }
-
-    func isBookmarked(fullName: String) -> Bool {
-        bookmarkedRepositoryIDs.contains(fullName)
-    }
-
-    /// 詳細画面で取得した `RepositoryDetail` をブックマークに追加する。
-    func addBookmark(_ repositoryDetail: RepositoryDetail) {
-        updateBookmarks { () throws(BookmarkStorageError) in
-            try bookmarkService.addBookmark(repositoryDetail)
-        }
-    }
-
-    func removeBookmark(fullName: String) {
-        updateBookmarks { () throws(BookmarkStorageError) in
-            try bookmarkService.removeBookmark(fullName: fullName)
-        }
-    }
-
     // MARK: - Private
 
     private func loadMore(_ page: NextPage) {
@@ -221,16 +174,5 @@ final class RepositorySearchViewModel {
     private static func removingDuplicates(_ repositories: [Repository]) -> [Repository] {
         var seenIDs = Set<Repository.ID>()
         return repositories.filter { seenIDs.insert($0.id).inserted }
-    }
-
-    /// 成功したときだけ登録状態を保存先の内容に合わせ、失敗したときは変えずに `bookmarkStorageError` とログに残す。
-    private func updateBookmarks(_ update: () throws(BookmarkStorageError) -> [RepositoryDetail]) {
-        do {
-            bookmarkedRepositoryIDs = Set(try update().map(\.id))
-            bookmarkStorageError = nil
-        } catch {
-            logger.error("Failed to update bookmarks: \(String(describing: error), privacy: .public)")
-            bookmarkStorageError = error
-        }
     }
 }
